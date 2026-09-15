@@ -1,0 +1,57 @@
+[
+  {
+    "slug": "dns-failure",
+    "title": "Broken DNS Resolution",
+    "domain": "Networking",
+    "difficulty": "beginner",
+    "initialState": "dns_failure",
+    "allowedCommands": ["ping 8.8.8.8", "cat /etc/resolv.conf", "nslookup example.com", "ip route"],
+    "rootCause": "The configured DNS resolver is incorrect.",
+    "repairAction": "Replace the invalid resolver with a working resolver.",
+    "verification": "nslookup example.com succeeds."
+  },
+  {
+    "slug": "nginx-stopped",
+    "title": "Web Server Down",
+    "domain": "Linux",
+    "difficulty": "beginner",
+    "initialState": "nginx_stopped",
+    "allowedCommands": ["systemctl status nginx", "journalctl", "ss -tulpn", "curl localhost"],
+    "rootCause": "Nginx is stopped.",
+    "repairAction": "Start the nginx service.",
+    "verification": "curl localhost returns an HTTP response."
+  },
+  {
+    "slug": "disk-full",
+    "title": "Disk Full",
+    "domain": "Linux",
+    "difficulty": "intermediate",
+    "initialState": "disk_full",
+    "allowedCommands": ["df -h", "du -h", "journalctl"],
+    "rootCause": "A filesystem is at or near 100% capacity.",
+    "repairAction": "Identify and remove/rotate the offending data according to the scenario rules.",
+    "verification": "df -h shows sufficient free space."
+  },
+  {
+    "slug": "wrong-gateway",
+    "title": "Wrong Default Gateway",
+    "domain": "Networking",
+    "difficulty": "intermediate",
+    "initialState": "wrong_gateway",
+    "allowedCommands": ["ip addr", "ip route", "ping 192.168.1.1", "ping 8.8.8.8"],
+    "rootCause": "The default route points to the wrong gateway.",
+    "repairAction": "Correct the default route in the simulation.",
+    "verification": "The gateway and external connectivity checks succeed."
+  },
+  {
+    "slug": "firewall-port",
+    "title": "Blocked Web Port",
+    "domain": "Cybersecurity",
+    "difficulty": "intermediate",
+    "initialState": "firewall_blocking_port",
+    "allowedCommands": ["ss -tulpn", "curl localhost", "ping 10.0.0.10"],
+    "rootCause": "The target service is reachable but the required port is blocked by the simulated firewall.",
+    "repairAction": "Allow the required port in the scenario simulation.",
+    "verification": "The connection to the target service succeeds."
+  }
+]
