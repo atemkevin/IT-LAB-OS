@@ -24,9 +24,12 @@ export function Topbar({ email }: TopbarProps) {
 
       <div className="ml-auto flex items-center gap-3">
         {email && (
-          <span className="hidden text-xs text-[var(--color-text-tertiary)] sm:block">
+          <Link
+            href="/profile"
+            className="hidden text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-brand)] transition-colors sm:block"
+          >
             {email}
-          </span>
+          </Link>
         )}
         <SignOutButton />
       </div>

@@ -4,7 +4,14 @@ import { NextResponse, type NextRequest } from "next/server";
 /**
  * Public paths that do NOT require authentication.
  */
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/api/health"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/reset-password",
+  "/auth/callback",
+  "/api/health",
+];
 
 /**
  * Paths that must be excluded from middleware processing entirely.
@@ -61,8 +68,11 @@ export async function middleware(request: NextRequest) {
 
   const isAuthenticated = !!user;
 
-  // Redirect authenticated users away from login
-  if (isAuthenticated && pathname === "/login") {
+  // Redirect authenticated users away from public auth pages
+  if (
+    isAuthenticated &&
+    (pathname === "/login" || pathname === "/register" || pathname === "/forgot-password")
+  ) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
