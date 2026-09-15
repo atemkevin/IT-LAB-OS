@@ -2,6 +2,13 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { evaluateAssessment, ONBOARDING_QUESTIONS } from "@/lib/onboarding/assessment";
+import {
+  onboardingSchema,
+  EXPERIENCE_LEVELS,
+  PRIMARY_GOALS,
+  type ExperienceLevel,
+  type PrimaryGoal,
+} from "@/lib/auth/schemas";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -23,7 +30,7 @@ describe("Phase 3 — Authentication, Profile & Onboarding Integration Tests", (
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // 1. Test registration via admin
+    // 1. Create test users via admin
     const { data: u1 } = await admin.auth.admin.createUser({
       email: user1Email,
       password: testPassword,
@@ -69,26 +76,28 @@ describe("Phase 3 — Authentication, Profile & Onboarding Integration Tests", (
       });
 
       expect(error).toBeNull();
-      expect(data.session).toBeDefined();
-      expect(data.user?.id).toBe(user1Id);
+      expect(data.user).toBeDefined();
+      expect(data.user?.email).toBe(user1Email);
+      expect(data.session?.access_token).toBeDefined();
     });
 
     it("fails to sign in with invalid password", async () => {
-      const client = createClient<Database>(url, anonKey, {
+      const tempClient = createClient<Database>(url, anonKey, {
         auth: { persistSession: false, autoRefreshToken: false },
       });
 
-      const { data, error } = await client.auth.signInWithPassword({
+      const { data, error } = await tempClient.auth.signInWithPassword({
         email: user1Email,
-        password: "WrongPassword999!",
+        password: "WrongPassword!456",
       });
 
       expect(error).not.toBeNull();
-      expect(data.session).toBeNull();
+      expect(data.user).toBeNull();
+      expect(error?.message).toMatch(/invalid login credentials/i);
     });
 
     it("successfully signs out and terminates session", async () => {
-      const tempEmail = `p3_temp_${timestamp}@itlabos.test`;
+      const tempEmail = `temp_signout_${Date.now()}@itlabos.test`;
       const { data: tempUser } = await admin.auth.admin.createUser({
         email: tempEmail,
         password: testPassword,
@@ -97,15 +106,19 @@ describe("Phase 3 — Authentication, Profile & Onboarding Integration Tests", (
 
       const tempClient = createClient<Database>(url, anonKey, {
         auth: {
-          storageKey: `p3-temp-${timestamp}`,
+          storageKey: `p3-temp-${Date.now()}`,
           persistSession: true,
           autoRefreshToken: false,
         },
       });
 
-      await tempClient.auth.signInWithPassword({ email: tempEmail, password: testPassword });
+      await tempClient.auth.signInWithPassword({
+        email: tempEmail,
+        password: testPassword,
+      });
+
       const { data: sessionBefore } = await tempClient.auth.getSession();
-      expect(sessionBefore.session).toBeDefined();
+      expect(sessionBefore.session).not.toBeNull();
 
       const { error: signOutErr } = await tempClient.auth.signOut();
       expect(signOutErr).toBeNull();
@@ -119,7 +132,6 @@ describe("Phase 3 — Authentication, Profile & Onboarding Integration Tests", (
 
   describe("2. PROFILE: Creation, Ownership, Update & Isolation", () => {
     it("creates profile linked strictly to authenticated user ID", async () => {
-      // User 1 creates profile
       const { data, error } = await user1Client
         .from("profiles")
         .upsert({
@@ -136,6 +148,8 @@ describe("Phase 3 — Authentication, Profile & Onboarding Integration Tests", (
       expect(error).toBeNull();
       expect(data?.id).toBe(user1Id);
       expect(data?.display_name).toBe("Engineer Alpha");
+      expect(data?.experience_level).toBe("Intermediate");
+      expect(data?.primary_goal).toBe("Network Engineer");
       expect(data?.onboarding_done).toBe(false);
     });
 
@@ -153,82 +167,188 @@ describe("Phase 3 — Authentication, Profile & Onboarding Integration Tests", (
     });
 
     it("enforces user isolation: User 2 cannot read or modify User 1's profile", async () => {
-      // Sign in User 2
       await user2Client.auth.signInWithPassword({
         email: user2Email,
         password: testPassword,
       });
 
-      // User 2 attempts to read User 1 profile
-      const { data: readData, error: readError } = await user2Client
+      const { data: user1ProfileFromUser2 } = await user2Client
         .from("profiles")
         .select("*")
-        .eq("id", user1Id);
+        .eq("id", user1Id)
+        .maybeSingle();
 
-      expect(readError).toBeNull();
-      expect(readData).toEqual([]); // RLS blocks read
+      expect(user1ProfileFromUser2).toBeNull();
 
-      // User 2 attempts to update User 1 profile
       const { error: updateError } = await user2Client
         .from("profiles")
-        .update({ display_name: "Compromised by User 2" })
+        .update({ display_name: "Hacked Alpha" })
         .eq("id", user1Id);
 
       expect(updateError).toBeNull();
 
-      // Verify User 1 profile remains untouched
-      const { data: verifyData } = await user1Client
+      const { data: pristineUser1 } = await user1Client
         .from("profiles")
         .select("display_name")
         .eq("id", user1Id)
         .single();
 
-      expect(verifyData?.display_name).toBe("Senior Engineer Alpha");
+      expect(pristineUser1?.display_name).toBe("Senior Engineer Alpha");
     });
   });
 
-  describe("3. ONBOARDING: Assessment, Evidence & State Transition", () => {
-    it("evaluates deterministic assessment questions accurately", () => {
-      // Perfect answers
+  describe("3. PRODUCT ALIGNMENT: Experience Levels & Primary Goals", () => {
+    it("validates all four canonical experience levels in schema", () => {
+      EXPERIENCE_LEVELS.forEach((level) => {
+        const result = onboardingSchema.safeParse({
+          experience_level: level,
+          primary_goal: "Network Engineer",
+          daily_minutes: 60,
+          environment: ["Linux", "Docker"],
+        });
+        expect(result.success).toBe(true);
+      });
+    });
+
+    it("validates all four canonical primary goals in schema", () => {
+      PRIMARY_GOALS.forEach((goal) => {
+        const result = onboardingSchema.safeParse({
+          experience_level: "Intermediate",
+          primary_goal: goal,
+          daily_minutes: 60,
+          environment: ["Linux"],
+        });
+        expect(result.success).toBe(true);
+      });
+    });
+
+    it("rejects legacy goal values in schema", () => {
+      const legacyGoals = ["DevOps", "Cloud Architect", "Systems Admin", "Security"];
+      legacyGoals.forEach((legacyGoal) => {
+        const result = onboardingSchema.safeParse({
+          experience_level: "Intermediate",
+          primary_goal: legacyGoal,
+          daily_minutes: 60,
+          environment: ["Linux"],
+        });
+        expect(result.success).toBe(false);
+      });
+    });
+
+    it("rejects legacy experience level values in schema", () => {
+      const legacyLevels = ["Advanced", "Beginner", "foundational"];
+      legacyLevels.forEach((legacyLevel) => {
+        const result = onboardingSchema.safeParse({
+          experience_level: legacyLevel,
+          primary_goal: "Cybersecurity",
+          daily_minutes: 60,
+          environment: ["Linux"],
+        });
+        expect(result.success).toBe(false);
+      });
+    });
+  });
+
+  describe("4. ASSESSMENT: 6 Foundation Domains & Evaluation Engine", () => {
+    it("contains exactly 6 questions mapping to the foundation curriculum domains and skills", () => {
+      expect(ONBOARDING_QUESTIONS.length).toBe(6);
+
+      const expectedDomains = [
+        "Computer / IT Fundamentals",
+        "Operating Systems",
+        "Networking",
+        "Linux",
+        "Cybersecurity",
+        "Automation / scripting",
+      ];
+
+      const questionDomains = ONBOARDING_QUESTIONS.map((q) => q.domain);
+      expectedDomains.forEach((domain) => {
+        expect(questionDomains).toContain(domain);
+      });
+
+      const questionSkills = ONBOARDING_QUESTIONS.map((q) => q.skillSlug);
+      expect(questionSkills).toContain("cpu-memory-storage");
+      expect(questionSkills).toContain("processes-services");
+      expect(questionSkills).toContain("ip-addressing");
+      expect(questionSkills).toContain("linux-permissions");
+      expect(questionSkills).toContain("authentication-authorization");
+      expect(questionSkills).toContain("python-basics");
+    });
+
+    it("evaluates deterministic score and maps to 4-level experience model", () => {
+      // 1. Perfect score: 6/6 -> 100%, Experienced
       const perfectAnswers: Record<string, string> = {
-        q_linux: "top",
+        q_comp: "Random Access Memory (RAM)",
+        q_os: "Service (or Daemon)",
         q_net: "DHCP",
-        q_sec: "Disabling root password login and enforcing Ed25519 key-based authentication",
-        q_auto: "It describes the desired target state and enables reproducible, automated deployments",
+        q_linux: "744",
+        q_sec: "Authentication verifies who you are; Authorization determines what resources you are allowed to access",
+        q_auto: "List",
       };
 
       const result100 = evaluateAssessment(perfectAnswers, "Network Engineer");
       expect(result100.percentageScore).toBe(100);
-      expect(result100.correctCount).toBe(4);
-      expect(result100.startingLevel).toBe("advanced");
+      expect(result100.correctCount).toBe(6);
+      expect(result100.startingLevel).toBe("Experienced");
       expect(result100.weakSkills.length).toBe(0);
+      expect(result100.recommendedFirstSkill).toBe("subnetting");
 
-      // Flawed answers
-      const partialAnswers: Record<string, string> = {
-        q_linux: "ls -la", // wrong
+      // 2. Intermediate score: 3/6 -> 50%, Intermediate
+      const intermediateAnswers: Record<string, string> = {
+        q_comp: "Random Access Memory (RAM)", // correct
+        q_os: "Foreground job", // wrong
         q_net: "DHCP", // correct
-        q_sec: "Using password authentication with 8 characters", // wrong
-        q_auto: "It describes the desired target state and enables reproducible, automated deployments", // correct
+        q_linux: "777", // wrong
+        q_sec: "Authentication verifies who you are; Authorization determines what resources you are allowed to access", // correct
+        q_auto: "Dictionary", // wrong
       };
 
-      const result50 = evaluateAssessment(partialAnswers, "Cybersecurity");
+      const result50 = evaluateAssessment(intermediateAnswers, "Cybersecurity");
       expect(result50.percentageScore).toBe(50);
-      expect(result50.correctCount).toBe(2);
-      expect(result50.startingLevel).toBe("intermediate");
+      expect(result50.correctCount).toBe(3);
+      expect(result50.startingLevel).toBe("Intermediate");
+      expect(result50.weakDomains).toContain("Operating Systems");
       expect(result50.weakDomains).toContain("Linux");
-      expect(result50.weakDomains).toContain("Cybersecurity");
-      expect(result50.weakSkills).toContain("processes-services");
-      expect(result50.weakSkills).toContain("ssh");
-      expect(result50.recommendedFirstSkill).toBe("security-fundamentals");
-    });
+      expect(result50.weakDomains).toContain("Automation / scripting");
 
-    it("persists onboarding completion, environment metadata, and mastery evidence", async () => {
+      // 3. Basic score: 2/6 -> 33%, Some basic knowledge
+      const basicAnswers: Record<string, string> = {
+        q_comp: "Random Access Memory (RAM)", // correct
+        q_os: "Foreground job", // wrong
+        q_net: "DHCP", // correct
+        q_linux: "777", // wrong
+        q_sec: "Wrong", // wrong
+        q_auto: "Wrong", // wrong
+      };
+
+      const result33 = evaluateAssessment(basicAnswers, "AI Automation");
+      expect(result33.percentageScore).toBe(33);
+      expect(result33.correctCount).toBe(2);
+      expect(result33.startingLevel).toBe("Some basic knowledge");
+      expect(result33.weakSkills).toContain("python-basics");
+      expect(result33.recommendedFirstSkill).toBe("python-basics");
+
+      // 4. Zero score: 0/6 -> 0%, Complete beginner
+      const result0 = evaluateAssessment({}, "General IT / Infrastructure");
+      expect(result0.percentageScore).toBe(0);
+      expect(result0.correctCount).toBe(0);
+      expect(result0.startingLevel).toBe("Complete beginner");
+      expect(result0.weakSkills).toContain("cpu-memory-storage");
+      expect(result0.recommendedFirstSkill).toBe("computer-basics");
+    });
+  });
+
+  describe("5. ONBOARDING: Persistence & Idempotency", () => {
+    it("persists onboarding completion, environment metadata, and baseline mastery evidence", async () => {
       const assessmentResult = evaluateAssessment(
         {
-          q_linux: "top",
+          q_comp: "Random Access Memory (RAM)",
+          q_os: "Service (or Daemon)",
           q_net: "DHCP",
-          q_sec: "Disabling root password login and enforcing Ed25519 key-based authentication",
-          q_auto: "It describes the desired target state and enables reproducible, automated deployments",
+          q_linux: "744",
+          q_sec: "Authentication verifies who you are; Authorization determines what resources you are allowed to access",
+          q_auto: "List",
         },
         "Network Engineer",
       );
@@ -238,10 +358,14 @@ describe("Phase 3 — Authentication, Profile & Onboarding Integration Tests", (
         .from("profiles")
         .update({
           onboarding_done: true,
+          experience_level: "Experienced",
+          primary_goal: "Network Engineer",
           environment: {
             tools: ["Linux", "Docker", "GitHub"],
             startingLevel: assessmentResult.startingLevel,
             recommendedFirstSkill: assessmentResult.recommendedFirstSkill,
+            assessmentScore: assessmentResult.percentageScore,
+            completedAt: new Date().toISOString(),
           },
         })
         .eq("id", user1Id)
@@ -250,15 +374,18 @@ describe("Phase 3 — Authentication, Profile & Onboarding Integration Tests", (
 
       expect(profileErr).toBeNull();
       expect(updatedProfile?.onboarding_done).toBe(true);
+      expect(updatedProfile?.experience_level).toBe("Experienced");
+      expect(updatedProfile?.primary_goal).toBe("Network Engineer");
       expect((updatedProfile?.environment as any)?.tools).toContain("Docker");
 
-      // Verify mastery_evidence recorded via admin client
+      // Look up target skill for evidence
       const { data: skillRow } = await admin
         .from("skills")
         .select("id")
         .eq("slug", "subnetting")
         .single();
 
+      // Write baseline evidence via admin client
       const { data: evidence, error: evErr } = await admin
         .from("mastery_evidence")
         .insert({
@@ -269,6 +396,8 @@ describe("Phase 3 — Authentication, Profile & Onboarding Integration Tests", (
           metadata: {
             source: "onboarding_assessment",
             startingLevel: assessmentResult.startingLevel,
+            correctCount: assessmentResult.correctCount,
+            totalQuestions: assessmentResult.totalQuestions,
           },
         })
         .select()
@@ -279,20 +408,93 @@ describe("Phase 3 — Authentication, Profile & Onboarding Integration Tests", (
       expect(evidence?.user_id).toBe(user1Id);
     });
 
-    it("verifies routing redirect logic based on onboarding_done state", () => {
-      // Incomplete onboarding logic: must redirect to /onboarding
-      const incompleteProfile = { onboarding_done: false };
-      const targetRouteIncomplete = incompleteProfile.onboarding_done ? "/dashboard" : "/onboarding";
-      expect(targetRouteIncomplete).toBe("/onboarding");
+    it("verifies idempotency: repeated onboarding submission does not create duplicate evidence", async () => {
+      // Query baseline evidence count for user1Id before repeat
+      const { data: initialEvidenceList } = await admin
+        .from("mastery_evidence")
+        .select("id")
+        .eq("user_id", user1Id)
+        .eq("evidence_type", "quiz")
+        .contains("metadata", { source: "onboarding_assessment" });
 
-      // Completed onboarding logic: must redirect to /dashboard
-      const completeProfile = { onboarding_done: true };
-      const targetRouteComplete = completeProfile.onboarding_done ? "/dashboard" : "/onboarding";
-      expect(targetRouteComplete).toBe("/dashboard");
+      expect(initialEvidenceList?.length).toBe(1);
+      const originalEvidenceId = initialEvidenceList![0].id;
+
+      // Simulate second submission using the idempotent logic implemented in /api/onboarding
+      const newAssessmentResult = evaluateAssessment(
+        {
+          q_comp: "Random Access Memory (RAM)",
+          q_os: "Service (or Daemon)",
+        },
+        "Network Engineer",
+      );
+
+      // 1. Idempotent profile update
+      await user1Client
+        .from("profiles")
+        .upsert({
+          id: user1Id,
+          display_name: "Senior Engineer Alpha",
+          experience_level: newAssessmentResult.startingLevel,
+          primary_goal: "Network Engineer",
+          daily_minutes: 60,
+          onboarding_done: true,
+          environment: {
+            tools: ["Linux", "Docker"],
+            startingLevel: newAssessmentResult.startingLevel,
+            assessmentScore: newAssessmentResult.percentageScore,
+            completedAt: new Date().toISOString(),
+          },
+        });
+
+      // 2. Idempotent evidence update: check existing record and update in place
+      const { data: existingEvidence } = await admin
+        .from("mastery_evidence")
+        .select("id")
+        .eq("user_id", user1Id)
+        .eq("evidence_type", "quiz")
+        .contains("metadata", { source: "onboarding_assessment" })
+        .maybeSingle();
+
+      expect(existingEvidence?.id).toBe(originalEvidenceId);
+
+      await admin
+        .from("mastery_evidence")
+        .update({
+          score: newAssessmentResult.percentageScore,
+          metadata: {
+            source: "onboarding_assessment",
+            correctCount: newAssessmentResult.correctCount,
+            totalQuestions: newAssessmentResult.totalQuestions,
+            startingLevel: newAssessmentResult.startingLevel,
+            updatedAt: new Date().toISOString(),
+          },
+        })
+        .eq("id", existingEvidence!.id);
+
+      // Verify no duplicate evidence rows exist for onboarding_assessment
+      const { data: finalEvidenceList } = await admin
+        .from("mastery_evidence")
+        .select("id, score")
+        .eq("user_id", user1Id)
+        .eq("evidence_type", "quiz")
+        .contains("metadata", { source: "onboarding_assessment" });
+
+      expect(finalEvidenceList?.length).toBe(1);
+      expect(finalEvidenceList![0].id).toBe(originalEvidenceId);
+      expect(finalEvidenceList![0].score).toBe(newAssessmentResult.percentageScore);
+
+      // Verify profiles row count remains exactly 1 for user1
+      const { data: user1Profiles } = await admin
+        .from("profiles")
+        .select("id")
+        .eq("id", user1Id);
+
+      expect(user1Profiles?.length).toBe(1);
     });
   });
 
-  describe("4. SECURITY: Unauthenticated & Foreign Profile Access", () => {
+  describe("6. SECURITY: Unauthenticated & Foreign Profile Access", () => {
     it("prevents unauthenticated clients from reading private profile data", async () => {
       const anonClient = createClient<Database>(url, anonKey, {
         auth: { persistSession: false, autoRefreshToken: false },

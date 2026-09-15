@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
+import { EXPERIENCE_LEVELS, PRIMARY_GOALS } from "@/lib/auth/schemas";
 
 const updateProfileSchema = z.object({
   display_name: z.string().min(1).max(50).optional(),
-  experience_level: z.string().optional(),
+  experience_level: z.enum(EXPERIENCE_LEVELS).optional(),
   daily_minutes: z.union([z.literal(30), z.literal(60), z.literal(90), z.literal(120)]).optional(),
-  primary_goal: z.string().optional(),
+  primary_goal: z.enum(PRIMARY_GOALS).optional(),
 });
 
 export async function GET() {

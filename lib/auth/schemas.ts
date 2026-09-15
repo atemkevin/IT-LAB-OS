@@ -38,19 +38,38 @@ export const resetPasswordSchema = z
     path: ["confirmPassword"],
   });
 
+export const EXPERIENCE_LEVELS = [
+  "Complete beginner",
+  "Some basic knowledge",
+  "Intermediate",
+  "Experienced",
+] as const;
+
+export type ExperienceLevel = (typeof EXPERIENCE_LEVELS)[number];
+
+export const PRIMARY_GOALS = [
+  "Network Engineer",
+  "Cybersecurity",
+  "AI Automation",
+  "General IT / Infrastructure",
+] as const;
+
+export type PrimaryGoal = (typeof PRIMARY_GOALS)[number];
+
+export interface UserEnvironment {
+  tools: string[];
+  startingLevel: ExperienceLevel;
+  weakDomains: string[];
+  weakSkills: string[];
+  recommendedFirstSkill: string;
+  assessmentScore: number;
+  completedAt: string;
+  updatedAt?: string;
+}
+
 export const onboardingSchema = z.object({
-  experience_level: z.enum([
-    "Complete beginner",
-    "Some basic knowledge",
-    "Intermediate",
-    "Experienced",
-  ]),
-  primary_goal: z.enum([
-    "Network Engineer",
-    "Cybersecurity",
-    "AI Automation",
-    "General IT / Infrastructure",
-  ]),
+  experience_level: z.enum(EXPERIENCE_LEVELS),
+  primary_goal: z.enum(PRIMARY_GOALS),
   daily_minutes: z.union([
     z.literal(30),
     z.literal(60),

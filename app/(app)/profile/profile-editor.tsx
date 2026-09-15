@@ -109,8 +109,8 @@ export function ProfileEditor({ initialProfile, email }: ProfileEditorProps) {
                 onChange={(e) => setExperienceLevel(e.target.value)}
                 className="mt-1 flex h-9 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
               >
-                <option value="Complete beginner">Complete Beginner</option>
-                <option value="Some basic knowledge">Some Basic Knowledge</option>
+                <option value="Complete beginner">Complete beginner</option>
+                <option value="Some basic knowledge">Some basic knowledge</option>
                 <option value="Intermediate">Intermediate</option>
                 <option value="Experienced">Experienced</option>
               </select>
@@ -133,8 +133,8 @@ export function ProfileEditor({ initialProfile, email }: ProfileEditorProps) {
                 className="mt-1 flex h-9 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm text-[var(--color-text-primary)] focus:border-[var(--color-brand)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
               >
                 <option value="Network Engineer">Network Engineer</option>
-                <option value="Cybersecurity">Cybersecurity Analyst</option>
-                <option value="AI Automation">AI & Automation Engineer</option>
+                <option value="Cybersecurity">Cybersecurity</option>
+                <option value="AI Automation">AI Automation</option>
                 <option value="General IT / Infrastructure">General IT / Infrastructure</option>
               </select>
             </div>

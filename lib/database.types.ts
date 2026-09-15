@@ -1274,6 +1274,8 @@ export const Constants = {
 } as const
 
 // Application Domain Union Types
+export type { ExperienceLevel, PrimaryGoal } from "./auth/schemas";
+
 export type MasteryState =
   | "not_started"
   | "developing"

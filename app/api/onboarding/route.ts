@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     const assessmentResult = evaluateAssessment(assessmentAnswers, primary_goal);
 
     // 2. Prepare environment and profile metadata
-    const environmentData = {
+    const environmentData: import("@/lib/auth/schemas").UserEnvironment = {
       tools: environment,
       startingLevel: assessmentResult.startingLevel,
       weakDomains: assessmentResult.weakDomains,
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
         experience_level,
         primary_goal,
         daily_minutes,
-        environment: environmentData,
+        environment: environmentData as any,
         onboarding_done: true,
         updated_at: new Date().toISOString(),
       });
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. Record assessment evidence in mastery_evidence using admin client (mastery records are system controlled)
+    // 4. Record assessment evidence in mastery_evidence using admin client (idempotent baseline evidence)
     const admin = getAdminClient();
 
     // Look up ID for the recommended skill if available
@@ -85,7 +85,16 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (skillRow) {
-      await admin.from("mastery_evidence").insert({
+      // Check for existing baseline onboarding assessment evidence to prevent duplicate rows on repeated submissions
+      const { data: existingEvidence } = await admin
+        .from("mastery_evidence")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("evidence_type", "quiz")
+        .contains("metadata", { source: "onboarding_assessment" })
+        .maybeSingle();
+
+      const evidencePayload = {
         user_id: user.id,
         skill_id: skillRow.id,
         evidence_type: "quiz",
@@ -96,8 +105,18 @@ export async function POST(request: NextRequest) {
           totalQuestions: assessmentResult.totalQuestions,
           startingLevel: assessmentResult.startingLevel,
           weakSkills: assessmentResult.weakSkills,
+          updatedAt: new Date().toISOString(),
         },
-      });
+      };
+
+      if (existingEvidence) {
+        await admin
+          .from("mastery_evidence")
+          .update(evidencePayload)
+          .eq("id", existingEvidence.id);
+      } else {
+        await admin.from("mastery_evidence").insert(evidencePayload);
+      }
     }
 
     return NextResponse.json({

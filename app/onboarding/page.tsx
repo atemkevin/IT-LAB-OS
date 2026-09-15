@@ -27,17 +27,17 @@ const STEPS = [
 ];
 
 const EXPERIENCE_OPTIONS = [
-  { id: "Complete beginner", label: "Complete Beginner", desc: "New to IT systems, terminal commands, and networking concepts." },
-  { id: "Some basic knowledge", label: "Some Basic Knowledge", desc: "Familiar with general tech concepts, used basic shell or command prompt." },
+  { id: "Complete beginner", label: "Complete beginner", desc: "New to IT systems, terminal commands, and networking concepts." },
+  { id: "Some basic knowledge", label: "Some basic knowledge", desc: "Familiar with general tech concepts, used basic shell or command prompt." },
   { id: "Intermediate", label: "Intermediate", desc: "Hands-on experience configuring services, networks, or writing scripts." },
   { id: "Experienced", label: "Experienced", desc: "Working professional looking to cross-train or formalize deep lab mastery." },
 ];
 
 const GOAL_OPTIONS = [
   { id: "Network Engineer", label: "Network Engineer", icon: Layers, desc: "Master TCP/IP, subnetting, routing, DNS, and traffic analysis." },
-  { id: "Cybersecurity", label: "Cybersecurity Analyst", icon: Shield, desc: "Focus on defensive hardening, identity, access control, and auditing." },
-  { id: "AI Automation", label: "AI & Automation Engineer", icon: Bot, desc: "Build agentic workflows, API integrations, and Python automation." },
-  { id: "General IT / Infrastructure", label: "General IT / Infrastructure", icon: Terminal, desc: "Broad mastery across Linux, Windows AD, virtualization, and systems admin." },
+  { id: "Cybersecurity", label: "Cybersecurity", icon: Shield, desc: "Focus on defensive hardening, identity, access control, and auditing." },
+  { id: "AI Automation", label: "AI Automation", icon: Bot, desc: "Build agentic workflows, API integrations, and Python automation." },
+  { id: "General IT / Infrastructure", label: "General IT / Infrastructure", icon: Terminal, desc: "Broad mastery across Linux, Windows AD, virtualization, and systems infrastructure." },
 ];
 
 const TIME_OPTIONS = [
@@ -337,7 +337,7 @@ export default function OnboardingPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Baseline Technical Assessment</CardTitle>
-                <Badge variant="brand">4 Questions</Badge>
+                <Badge variant="brand">{ONBOARDING_QUESTIONS.length} Questions</Badge>
               </div>
               <CardDescription>
                 Answer these diagnostic questions to identify your starting level and any weak prerequisites.
@@ -348,7 +348,7 @@ export default function OnboardingPage() {
                 <div key={q.id} className="space-y-2 rounded-xl border border-[var(--color-border)] p-4 bg-[var(--color-surface)]">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-mono text-[var(--color-brand)]">{q.domain}</span>
-                    <span className="text-xs text-[var(--color-text-tertiary)]">Q{qIndex + 1} of 4</span>
+                    <span className="text-xs text-[var(--color-text-tertiary)]">Q{qIndex + 1} of {ONBOARDING_QUESTIONS.length}</span>
                   </div>
                   <p className="text-sm font-medium text-[var(--color-text-primary)]">{q.prompt}</p>
                   <div className="grid grid-cols-1 gap-2 pt-2">

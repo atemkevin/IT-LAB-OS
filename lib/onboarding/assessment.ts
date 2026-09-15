@@ -1,6 +1,9 @@
+import type { ExperienceLevel, PrimaryGoal } from "@/lib/auth/schemas";
+
 export interface AssessmentQuestion {
   id: string;
   domain: string;
+  domainSlug: string;
   prompt: string;
   options: string[];
   correctAnswer: string;
@@ -9,46 +12,73 @@ export interface AssessmentQuestion {
 
 export const ONBOARDING_QUESTIONS: AssessmentQuestion[] = [
   {
-    id: "q_linux",
-    domain: "Linux",
-    prompt: "Which Linux command displays real-time running processes and their memory and CPU usage?",
-    options: ["ls -la", "top", "cat /proc/version", "chmod 755"],
-    correctAnswer: "top",
+    id: "q_comp",
+    domain: "Computer / IT Fundamentals",
+    domainSlug: "computer-fundamentals",
+    prompt: "Which computer hardware component acts as high-speed, volatile temporary workspace that loses its data when powered off?",
+    options: [
+      "Solid State Drive (SSD)",
+      "Random Access Memory (RAM)",
+      "Read-Only Memory (ROM)",
+      "Hard Disk Drive (HDD)",
+    ],
+    correctAnswer: "Random Access Memory (RAM)",
+    skillSlug: "cpu-memory-storage",
+  },
+  {
+    id: "q_os",
+    domain: "Operating Systems",
+    domainSlug: "operating-systems",
+    prompt: "In modern operating systems, what is the term for a background process that runs continuously without direct user interaction?",
+    options: [
+      "Foreground job",
+      "Service (or Daemon)",
+      "Hypervisor",
+      "Bootloader",
+    ],
+    correctAnswer: "Service (or Daemon)",
     skillSlug: "processes-services",
   },
   {
     id: "q_net",
     domain: "Networking",
-    prompt: "What network protocol automatically leases IP addresses and configuration parameters to local hosts?",
+    domainSlug: "networking",
+    prompt: "What network protocol automatically leases IP addresses, subnet masks, and default gateways to local client hosts?",
     options: ["DNS", "DHCP", "BGP", "ARP"],
     correctAnswer: "DHCP",
     skillSlug: "ip-addressing",
   },
   {
+    id: "q_linux",
+    domain: "Linux",
+    domainSlug: "linux",
+    prompt: "In standard Linux octal file permissions, what numeric mode grants Read, Write, and Execute to the owner, but only Read to group and others?",
+    options: ["777", "755", "744", "644"],
+    correctAnswer: "744",
+    skillSlug: "linux-permissions",
+  },
+  {
     id: "q_sec",
     domain: "Cybersecurity",
-    prompt: "When hardening remote server access via SSH, which configuration provides the strongest defensive security?",
+    domainSlug: "cybersecurity",
+    prompt: "What is the primary difference between Authentication and Authorization in secure access control?",
     options: [
-      "Using password authentication with 8 characters",
-      "Disabling root password login and enforcing Ed25519 key-based authentication",
-      "Changing SSH port to 2222 with plain telnet fallback",
-      "Allowing password login only during scheduled business hours",
+      "Authentication verifies who you are; Authorization determines what resources you are allowed to access",
+      "Authentication encrypts passwords; Authorization issues TLS certificates",
+      "Authentication applies to network firewalls; Authorization applies to storage drives",
+      "Authentication occurs after access is granted; Authorization occurs before login",
     ],
-    correctAnswer: "Disabling root password login and enforcing Ed25519 key-based authentication",
-    skillSlug: "ssh",
+    correctAnswer: "Authentication verifies who you are; Authorization determines what resources you are allowed to access",
+    skillSlug: "authentication-authorization",
   },
   {
     id: "q_auto",
-    domain: "Automation & DevOps",
-    prompt: "In modern infrastructure management, what is the primary benefit of declarative Infrastructure as Code (IaC)?",
-    options: [
-      "It eliminates the need for git version control",
-      "It describes the desired target state and enables reproducible, automated deployments",
-      "It accelerates network packet routing at the kernel level",
-      "It removes the need for ingress firewall rules",
-    ],
-    correctAnswer: "It describes the desired target state and enables reproducible, automated deployments",
-    skillSlug: "automation-workflows",
+    domain: "Automation / scripting",
+    domainSlug: "python-automation",
+    prompt: "In Python automation scripts, which data structure stores an ordered, mutable sequence of elements enclosed in square brackets?",
+    options: ["Dictionary", "Tuple", "List", "Set"],
+    correctAnswer: "List",
+    skillSlug: "python-basics",
   },
 ];
 
@@ -56,7 +86,7 @@ export interface AssessmentResult {
   totalQuestions: number;
   correctCount: number;
   percentageScore: number;
-  startingLevel: "foundational" | "intermediate" | "advanced";
+  startingLevel: ExperienceLevel;
   weakDomains: string[];
   weakSkills: string[];
   recommendedFirstSkill: string;
@@ -68,7 +98,7 @@ export interface AssessmentResult {
  */
 export function evaluateAssessment(
   answers: Record<string, string> = {},
-  primaryGoal?: string,
+  primaryGoal?: PrimaryGoal | string,
 ): AssessmentResult {
   let correctCount = 0;
   const weakDomains: string[] = [];
@@ -95,24 +125,39 @@ export function evaluateAssessment(
 
   const percentageScore = Math.round((correctCount / ONBOARDING_QUESTIONS.length) * 100);
 
-  let startingLevel: AssessmentResult["startingLevel"] = "foundational";
-  if (percentageScore >= 75) {
-    startingLevel = "advanced";
+  // Map score to the authoritative 4-level experience model
+  let startingLevel: ExperienceLevel = "Complete beginner";
+  if (percentageScore >= 84) {
+    startingLevel = "Experienced";
   } else if (percentageScore >= 50) {
-    startingLevel = "intermediate";
+    startingLevel = "Intermediate";
+  } else if (percentageScore >= 33) {
+    startingLevel = "Some basic knowledge";
+  } else {
+    startingLevel = "Complete beginner";
   }
 
-  // Determine tailored starting skill based on primary goal and assessment
+  // Determine tailored starting skill based on primary goal and assessment weaknesses
   let recommendedFirstSkill = "computer-basics";
   if (primaryGoal === "Network Engineer") {
     recommendedFirstSkill = weakSkills.includes("ip-addressing") ? "ip-addressing" : "subnetting";
   } else if (primaryGoal === "Cybersecurity") {
-    recommendedFirstSkill = weakSkills.includes("ssh") ? "security-fundamentals" : "authentication-authorization";
+    recommendedFirstSkill = weakSkills.includes("authentication-authorization")
+      ? "security-fundamentals"
+      : "authentication-authorization";
   } else if (primaryGoal === "AI Automation") {
-    recommendedFirstSkill = weakSkills.includes("automation-workflows") ? "python-basics" : "llm-api-basics";
+    recommendedFirstSkill = weakSkills.includes("python-basics") ? "python-basics" : "api-basics";
   } else {
-    // General IT
-    recommendedFirstSkill = weakSkills.includes("processes-services") ? "linux-cli" : "filesystem-basics";
+    // General IT / Infrastructure
+    if (weakSkills.includes("cpu-memory-storage")) {
+      recommendedFirstSkill = "computer-basics";
+    } else if (weakSkills.includes("processes-services")) {
+      recommendedFirstSkill = "processes-services";
+    } else if (weakSkills.includes("linux-permissions")) {
+      recommendedFirstSkill = "linux-cli";
+    } else {
+      recommendedFirstSkill = "computer-basics";
+    }
   }
 
   return {
