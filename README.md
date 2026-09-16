@@ -30,23 +30,44 @@ npm run dev
 
 ## Database
 
-Apply `supabase/migrations/001_core_schema.sql` in the Supabase SQL Editor before starting.
+Apply the migrations in `supabase/migrations/` in order in the Supabase SQL Editor:
+
+| Migration | Purpose |
+|---|---|
+| `001_core_schema.sql` | 26 tables, RLS policies |
+| `002_indexes_and_triggers.sql` | Indexes and profile trigger |
+| `002_profile_trigger.sql` | Profile auto-creation on signup |
+| `003_curriculum_content.sql` | Domains, skills, lessons, practice, quizzes seed |
+| `003_feature_indexes.sql` | Indexes for notes/projects/troubleshooting |
+| `004_practice_evidence.sql` | Structured practice evidence keys |
+| `005_troubleshooting_scenarios.sql` | Troubleshooting scenario seed |
 
 ## Build phases
 
 | Phase | Description | Status |
 |---|---|---|
 | 0 | Inspect | ✅ Complete |
-| 1 | Foundation | 🔄 In Progress |
-| 2 | Supabase | ⏳ Pending |
-| 3 | Onboarding | ⏳ Pending |
-| 4 | Curriculum | ⏳ Pending |
-| 5 | Learning Engine | ⏳ Pending |
-| 6 | Dashboard | ⏳ Pending |
-| 7 | Daily Missions | ⏳ Pending |
-| 8 | Troubleshooting Simulator | ⏳ Pending |
-| 9 | AI Mentor | ⏳ Pending |
-| 10 | Projects + Notes | ⏳ Pending |
-| 11 | Progress | ⏳ Pending |
-| 12 | QA / Security | ⏳ Pending |
+| 1 | Foundation | ✅ Complete |
+| 2 | Supabase | ✅ Complete |
+| 3 | Onboarding | ✅ Complete |
+| 4 | Curriculum | ✅ Complete |
+| 5 | Learning Engine | ✅ Complete |
+| 6 | Dashboard | ✅ Complete |
+| 7 | Daily Missions | ✅ Complete |
+| 8 | Troubleshooting Simulator | ✅ Complete |
+| 9 | AI Mentor | ✅ Complete |
+| 10 | Projects + Notes | ✅ Complete |
+| 11 | Progress | 🔄 Partial (analytics exist; timeline/streaks pending) |
+| 12 | QA / Security | 🔄 Partial (unit + integration done; E2E/a11y pending) |
 | 13 | Production Readiness | ⏳ Pending |
+
+## Verification
+
+```bash
+npm run typecheck   # tsc --noEmit
+npm run lint        # eslint
+npm test            # vitest run (unit + integration)
+npm run build       # next build
+```
+
+Current state: 126 tests passing (90 unit, 36 integration), 39 routes compiled.
