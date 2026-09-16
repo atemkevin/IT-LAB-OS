@@ -30,17 +30,39 @@ npm run dev
 
 ## Database
 
-Apply the migrations in `supabase/migrations/` in order in the Supabase SQL Editor:
+Migrations live in `supabase/migrations/`. They are ordered by version, so
+apply them in filename order — either with the CLI:
+
+```bash
+supabase link --project-ref <your-project-ref>
+supabase db push
+```
+
+or by pasting each file into the Supabase SQL Editor.
 
 | Migration | Purpose |
 |---|---|
-| `001_core_schema.sql` | 26 tables, RLS policies |
-| `002_indexes_and_triggers.sql` | Indexes and profile trigger |
-| `002_profile_trigger.sql` | Profile auto-creation on signup |
+| `001_core_schema.sql` | Core tables and RLS policies |
+| `002_indexes_and_triggers.sql` | Performance indexes and `updated_at` triggers |
 | `003_curriculum_content.sql` | Domains, skills, lessons, practice, quizzes seed |
-| `003_feature_indexes.sql` | Indexes for notes/projects/troubleshooting |
 | `004_practice_evidence.sql` | Structured practice evidence keys |
 | `005_troubleshooting_scenarios.sql` | Troubleshooting scenario seed |
+| `006_streaks_and_timeline.sql` | `user_activity_logs`, profile streak columns |
+| `007_streak_rpc.sql` | `record_daily_activity()` — atomic streak update |
+| `008_profiles_column_privileges.sql` | Column-level grants; locks server-authoritative profile fields |
+| `20240916000001_profile_trigger.sql` | Profile auto-creation on signup |
+| `20240916000002_feature_indexes.sql` | Indexes for notes/projects/troubleshooting |
+
+### Regenerating database types
+
+`lib/database.types.ts` is generated, then merged with the hand-maintained
+enums and Row aliases in `scripts/db-type-aliases.txt`:
+
+```bash
+bash scripts/regen-types.sh
+```
+
+Never hand-edit the generated region — the merge step will overwrite it.
 
 ## Build phases
 
