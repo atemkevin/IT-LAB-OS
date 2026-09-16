@@ -1,7 +1,14 @@
 -- Allow users to insert their own profile
-create policy "insert own profile" on public.profiles 
-  for insert 
-  with check (id = auth.uid());
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies where schemaname='public' and tablename='profiles' and policyname='insert own profile'
+  ) then
+    create policy "insert own profile" on public.profiles
+      for insert
+      with check (id = auth.uid());
+  end if;
+end $$;
 
 -- Trigger to automatically create profile row on user signup
 create or replace function public.handle_new_user()

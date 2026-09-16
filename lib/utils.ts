@@ -50,6 +50,16 @@ export function todayString(): string {
 }
 
 /**
+ * Get yesterday's date as YYYY-MM-DD in local timezone.
+ * DST-safe: uses calendar arithmetic, not milliseconds.
+ */
+export function yesterdayString(): string {
+  const now = new Date();
+  now.setDate(now.getDate() - 1);
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+/**
  * Truncate a string to maxLength, appending "…" if trimmed.
  */
 export function truncate(str: string, maxLength: number): string {

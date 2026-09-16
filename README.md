@@ -57,9 +57,19 @@ Apply the migrations in `supabase/migrations/` in order in the Supabase SQL Edit
 | 8 | Troubleshooting Simulator | ✅ Complete |
 | 9 | AI Mentor | ✅ Complete |
 | 10 | Projects + Notes | ✅ Complete |
-| 11 | Progress | 🔄 Partial (analytics exist; timeline/streaks pending) |
-| 12 | QA / Security | 🔄 Partial (unit + integration done; E2E/a11y pending) |
-| 13 | Production Readiness | ⏳ Pending |
+| 11 | Progress | ✅ Complete |
+| 12 | QA / Security | ✅ Complete |
+| 13 | Production Readiness | ✅ Complete |
+
+## Deployment
+
+The project is configured for Vercel deployment and acts as a Progressive Web App (PWA).
+1. Push the code to a GitHub repository.
+2. Import the repository in [Vercel](https://vercel.com/).
+3. Add the environment variables from `.env.local` to the Vercel project settings.
+4. Deploy!
+
+The CI/CD pipeline (`.github/workflows/ci.yml`) will automatically run tests on every push.
 
 ## Verification
 

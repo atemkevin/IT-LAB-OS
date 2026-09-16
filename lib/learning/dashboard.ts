@@ -141,3 +141,50 @@ export async function getProgressMetrics(userId: string): Promise<ProgressMetric
     distribution,
   };
 }
+
+export interface TimelineMetrics {
+  currentStreak: number;
+  longestStreak: number;
+  lastActivityDate: string | null;
+  heatmap: Array<{ date: string; count: number }>;
+}
+
+export async function getTimelineMetrics(userId: string, days = 90): Promise<TimelineMetrics> {
+  const supabase = await createClient();
+
+  // 1. Fetch Streak data
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("current_streak, longest_streak, last_activity_date")
+    .eq("id", userId)
+    .single();
+
+  // 2. Fetch Activity Logs for the heatmap
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
+  const cutoffString = cutoffDate.toISOString().split("T")[0];
+
+  const { data: logs } = await supabase
+    .from("user_activity_logs")
+    .select("activity_date")
+    .eq("user_id", userId)
+    .gte("activity_date", cutoffString);
+
+  // 3. Aggregate logs by date
+  const countsByDate: Record<string, number> = {};
+  if (logs) {
+    for (const log of logs) {
+      const d = log.activity_date;
+      countsByDate[d] = (countsByDate[d] || 0) + 1;
+    }
+  }
+
+  const heatmap = Object.entries(countsByDate).map(([date, count]) => ({ date, count }));
+
+  return {
+    currentStreak: profile?.current_streak ?? 0,
+    longestStreak: profile?.longest_streak ?? 0,
+    lastActivityDate: profile?.last_activity_date ?? null,
+    heatmap,
+  };
+}

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * POST /api/lessons/[id]/progress
  * Start or complete a lesson. Authenticated endpoint.
  */
@@ -71,6 +71,10 @@ export async function POST(
       // Recalculate authoritative knowledge score for this skill
       const knowledgeScore = await calculateKnowledgeEvidence(user.id, authoritativeSkillId);
       await upsertSkillProgress(user.id, authoritativeSkillId, { knowledge_score: knowledgeScore });
+      
+      // Log activity for timeline and streaks
+      const { logActivity } = await import("@/lib/learning/activity");
+      await logActivity(user.id, "lesson_completed", { lessonId, skillId: authoritativeSkillId });
     }
 
     return NextResponse.json({ success: true, status: "completed", wasNew });

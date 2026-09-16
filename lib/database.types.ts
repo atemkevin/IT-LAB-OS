@@ -555,11 +555,14 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          current_streak: number
           daily_minutes: number | null
           display_name: string | null
           environment: Json | null
           experience_level: string | null
           id: string
+          last_activity_date: string | null
+          longest_streak: number
           onboarding_done: boolean
           primary_goal: string | null
           updated_at: string
@@ -567,11 +570,14 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          current_streak?: number
           daily_minutes?: number | null
           display_name?: string | null
           environment?: Json | null
           experience_level?: string | null
           id: string
+          last_activity_date?: string | null
+          longest_streak?: number
           onboarding_done?: boolean
           primary_goal?: string | null
           updated_at?: string
@@ -579,11 +585,14 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           created_at?: string
+          current_streak?: number
           daily_minutes?: number | null
           display_name?: string | null
           environment?: Json | null
           experience_level?: string | null
           id?: string
+          last_activity_date?: string | null
+          longest_streak?: number
           onboarding_done?: boolean
           primary_goal?: string | null
           updated_at?: string
@@ -1012,6 +1021,33 @@ export type Database = {
           },
         ]
       }
+      user_activity_logs: {
+        Row: {
+          activity_date: string
+          activity_type: string
+          created_at: string
+          details: Json | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          activity_date?: string
+          activity_type: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          activity_date?: string
+          activity_type?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_lesson_progress: {
         Row: {
           completed_at: string | null
@@ -1277,14 +1313,6 @@ export type CompositeTypes<
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
 
-export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
-  public: {
-    Enums: {},
-  },
-} as const
 export type MasteryState = "not_started" | "developing" | "practicing" | "proficient" | "strong";
 export type Difficulty = "beginner" | "intermediate" | "advanced";
 export type LessonStatus = "not_started" | "in_progress" | "completed";
@@ -1315,6 +1343,18 @@ export type MasteryEvidence = Database["public"]["Tables"]["mastery_evidence"]["
 export type LearningSession = Database["public"]["Tables"]["learning_sessions"]["Row"];
 export type DailyMission = Database["public"]["Tables"]["daily_missions"]["Row"];
 export type MissionTaskProgress = Database["public"]["Tables"]["mission_task_progress"]["Row"];
+
+export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
+  public: {
+    Enums: {},
+  },
+} as const
+
 export type Note = Database["public"]["Tables"]["notes"]["Row"];
 export type AIConversation = Database["public"]["Tables"]["ai_conversations"]["Row"];
 export type AIMessage = Database["public"]["Tables"]["ai_messages"]["Row"];
+
+

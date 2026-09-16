@@ -1,15 +1,20 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getProgressMetrics } from "@/lib/learning/dashboard";
+import { getProgressMetrics, getTimelineMetrics } from "@/lib/learning/dashboard";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Heatmap } from "@/components/ui/heatmap";
+import { Flame } from "lucide-react";
 
 export default async function ProgressPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const metrics = await getProgressMetrics(user.id);
+  const [metrics, timeline] = await Promise.all([
+    getProgressMetrics(user.id),
+    getTimelineMetrics(user.id, 90)
+  ]);
 
   const dimensions = [
     { label: "Knowledge (Quizzes & Reading)", value: metrics.knowledgeAvg, weight: 30, color: "var(--color-brand)" },
@@ -34,6 +39,37 @@ export default async function ProgressPage() {
         <p className="text-sm text-[var(--color-text-tertiary)]">
           Continuous tracking of your weighted skill mastery and retention curves.
         </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <Card className="md:col-span-1">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Flame className="w-5 h-5 text-orange-500" />
+              Daily Streaks
+            </CardTitle>
+            <CardDescription>Consecutive days of learning</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className="text-4xl font-bold text-[var(--color-text-primary)]">{timeline.currentStreak}</span>
+              <span className="text-sm font-medium text-[var(--color-text-secondary)]">days</span>
+            </div>
+            <p className="text-xs text-[var(--color-text-tertiary)]">
+              Longest streak: {timeline.longestStreak} days
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="md:col-span-2 overflow-x-auto">
+          <CardHeader>
+            <CardTitle>Activity Timeline</CardTitle>
+            <CardDescription>Learning intensity over the last 90 days</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Heatmap data={timeline.heatmap} days={90} />
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

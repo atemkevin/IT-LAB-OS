@@ -1,4 +1,4 @@
-﻿/**
+/**
  * POST /api/practice/[taskId]/attempt
  * Submit a practice attempt. Authenticated endpoint.
  */
@@ -95,6 +95,11 @@ export async function POST(
       await upsertSkillProgress(user.id, authoritativeSkillId, {
         practice_score: newScore,
       });
+    }
+
+    if (result.passed) {
+      const { logActivity } = await import("@/lib/learning/activity");
+      await logActivity(user.id, "practice_completed", { taskId, skillId: authoritativeSkillId, score: result.score });
     }
 
     return NextResponse.json(result);
