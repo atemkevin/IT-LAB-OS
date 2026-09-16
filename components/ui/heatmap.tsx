@@ -4,11 +4,7 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip"; // Note: might need to ensure tooltip is installed, we'll check later. Let's just use title if tooltip is not imported.
-
-// Wait, I saw radix-ui/react-tooltip in package.json! So tooltip should exist. Let's assume it exists or use basic title for now.
-// Actually, let's use a native title attribute to be safe and avoid missing component errors if tooltip.tsx doesn't exist.
-// Checking components/ui/ list from earlier, tooltip.tsx wasn't in the root of components/ui. It might be there, but native title is safest.
+} from "@/components/ui/tooltip";
 
 interface HeatmapProps {
   data: Array<{ date: string; count: number }>;
@@ -35,35 +31,45 @@ export function Heatmap({ data, days = 90 }: HeatmapProps) {
   };
 
   return (
-    <div className="flex flex-col gap-2">
-      <div 
-        className="grid grid-flow-col gap-1"
-        style={{ 
-          gridTemplateRows: "repeat(7, minmax(0, 1fr))",
-          // Calculate approx columns needed
-          gridTemplateColumns: `repeat(${Math.ceil(days / 7)}, minmax(0, 1fr))`
-        }}
-      >
-        {dateArray.map((date) => {
-          const count = countMap.get(date) || 0;
-          return (
-            <div
-              key={date}
-              className={`w-3 h-3 rounded-sm ${getColor(count)}`}
-              title={`${date}: ${count} activities`}
-            />
-          );
-        })}
+    <TooltipProvider delayDuration={120}>
+      <div className="flex flex-col gap-2">
+        <div
+          className="grid grid-flow-col gap-1"
+          style={{
+            gridTemplateRows: "repeat(7, minmax(0, 1fr))",
+            gridTemplateColumns: `repeat(${Math.ceil(days / 7)}, minmax(0, 1fr))`,
+          }}
+        >
+          {dateArray.map((date) => {
+            const count = countMap.get(date) || 0;
+            return (
+              <Tooltip key={date}>
+                <TooltipTrigger asChild>
+                  <div
+                    className={`w-3 h-3 rounded-sm ${getColor(count)}`}
+                    aria-label={`${date}: ${count} ${count === 1 ? "activity" : "activities"}`}
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <span className="font-mono">{date}</span>
+                  <span className="ml-2 text-[var(--color-text-tertiary)]">
+                    {count} {count === 1 ? "activity" : "activities"}
+                  </span>
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
+        <div className="flex justify-end items-center gap-1 text-xs text-[var(--color-text-tertiary)]">
+          <span>Less</span>
+          <div className="w-3 h-3 rounded-sm bg-[var(--color-background-secondary)]"></div>
+          <div className="w-3 h-3 rounded-sm bg-[var(--color-mastery-developing)] opacity-60"></div>
+          <div className="w-3 h-3 rounded-sm bg-[var(--color-mastery-practicing)] opacity-80"></div>
+          <div className="w-3 h-3 rounded-sm bg-[var(--color-mastery-proficient)]"></div>
+          <div className="w-3 h-3 rounded-sm bg-[var(--color-mastery-strong)]"></div>
+          <span>More</span>
+        </div>
       </div>
-      <div className="flex justify-end items-center gap-1 text-xs text-[var(--color-text-tertiary)]">
-        <span>Less</span>
-        <div className="w-3 h-3 rounded-sm bg-[var(--color-background-secondary)]"></div>
-        <div className="w-3 h-3 rounded-sm bg-[var(--color-mastery-developing)] opacity-60"></div>
-        <div className="w-3 h-3 rounded-sm bg-[var(--color-mastery-practicing)] opacity-80"></div>
-        <div className="w-3 h-3 rounded-sm bg-[var(--color-mastery-proficient)]"></div>
-        <div className="w-3 h-3 rounded-sm bg-[var(--color-mastery-strong)]"></div>
-        <span>More</span>
-      </div>
-    </div>
+    </TooltipProvider>
   );
 }

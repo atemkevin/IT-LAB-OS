@@ -15,8 +15,10 @@ const PUBLIC_PATHS = [
 
 /**
  * Paths that must be excluded from middleware processing entirely.
+ * /api/integrations is NOT bypassed — those routes authenticate via
+ * X-Integration-Key (see lib/api/integration-auth.ts), not the user session.
  */
-const BYPASS_PATHS = ["/_next", "/favicon.ico", "/public", "/api/integrations"];
+const BYPASS_PATHS = ["/_next", "/favicon.ico", "/public"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(
@@ -61,7 +63,11 @@ export async function middleware(request: NextRequest) {
     },
   );
 
-  // Refresh session (this also validates the session token)
+  // Refresh session (this also validates the session token).
+  // Integrations authenticate via a header, not a session cookie, so we don't
+  // require a user for /api/integrations/* — the route handler itself
+  // verifies the X-Integration-Key header.
+  const isIntegrationRoute = pathname.startsWith("/api/integrations");
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -76,11 +82,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  // Redirect unauthenticated users to login
-  if (!isAuthenticated && !isPublicPath(pathname)) {
+  // Redirect unauthenticated users to login (skip integration routes)
+  if (!isAuthenticated && !isPublicPath(pathname) && !isIntegrationRoute) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirectTo", pathname);
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.redirect(new URL(loginUrl, request.url));
   }
 
   return response;

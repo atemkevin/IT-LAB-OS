@@ -86,7 +86,6 @@ export function scoreAttempt(input: ScoreInput): AttemptScore {
 
   // Diagnostic path: successful distinct exploratory command runs.
   // Counted on unique commands so re-runs don't fake progress.
-  const commandsRun = input.state.commandsRun.length;
   const distinctSuccessful = new Set<string>();
   for (const c of input.state.commandsRun) {
     if (c.status === "ok") distinctSuccessful.add(c.command.trim().toLowerCase());
@@ -115,8 +114,7 @@ export function scoreAttempt(input: ScoreInput): AttemptScore {
     (fixApplied ? r.fixBonus : 0) +
     (verificationPassed ? r.verificationBonus : 0);
 
-  const raw =
-    component - unnecessaryPenalty - hintPenalty + Math.min(commandsRun, 0); // placeholder for any future weighting
+  const raw = component - unnecessaryPenalty - hintPenalty;
 
   // Bias the score slightly upward when verificationPassed: a fully resolved
   // attempt should typically land near the top band even with a few hints.
