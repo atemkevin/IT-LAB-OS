@@ -1,4 +1,4 @@
-﻿/**
+/**
  * lib/learning/types.ts
  *
  * Shared types for the learning engine.
@@ -114,8 +114,9 @@ export interface QuizResult {
 // --- Practice Types --------------------------------------------------------
 
 export interface PracticeSubmission {
+  responses: Record<string, string>;
   notes?: string;
-  completed: boolean;
+  completed: boolean; // Retained for UI state, but not trusted by server
 }
 
 export interface PracticeResult {
@@ -123,6 +124,7 @@ export interface PracticeResult {
   passed: boolean;
   score: number;
   feedback: string;
+  requirementResults?: Record<string, boolean>; // Maps evidence_key to pass/fail
 }
 
 // --- Progress Update -------------------------------------------------------

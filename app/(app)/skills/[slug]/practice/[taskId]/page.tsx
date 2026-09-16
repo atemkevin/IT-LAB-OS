@@ -30,6 +30,9 @@ export default async function PracticeTaskPage({
     .eq("id", task.skill_id)
     .maybeSingle();
 
+  const evidenceKeys = (task.evidence_keys as string[]) || [];
+  const requirements = (task.requirements as string[]) || [];
+
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
       <Link
@@ -58,24 +61,6 @@ export default async function PracticeTaskPage({
         </Card>
       )}
 
-      {Array.isArray(task.requirements) && (task.requirements as string[]).length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Requirements</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol className="space-y-2">
-              {(task.requirements as string[]).map((req, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-[var(--color-text-secondary)]">
-                  <span className="text-[var(--color-brand)] font-mono text-xs mt-0.5">{i + 1}.</span>
-                  {req}
-                </li>
-              ))}
-            </ol>
-          </CardContent>
-        </Card>
-      )}
-
       {Array.isArray(task.hints) && (task.hints as string[]).length > 0 && (
         <Card className="border-[var(--color-brand)]/20">
           <CardHeader>
@@ -84,26 +69,7 @@ export default async function PracticeTaskPage({
           <CardContent>
             <ul className="space-y-1">
               {(task.hints as string[]).map((hint, i) => (
-                <li key={i} className="text-xs text-[var(--color-text-tertiary)]">💡 {hint}</li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
-
-      {Array.isArray(task.success_criteria) && (task.success_criteria as string[]).length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Success Criteria</CardTitle>
-            <CardDescription className="text-xs">Check these off when done</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2">
-              {(task.success_criteria as string[]).map((criterion, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-[var(--color-text-secondary)]">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-[var(--color-text-tertiary)] mt-0.5" />
-                  {criterion}
-                </li>
+                <li key={i} className="text-xs text-[var(--color-text-tertiary)]">?? {hint}</li>
               ))}
             </ul>
           </CardContent>
@@ -111,7 +77,13 @@ export default async function PracticeTaskPage({
       )}
 
       {user && skill ? (
-        <PracticeClient taskId={taskId} skillId={skill.id} skillSlug={slug} />
+        <PracticeClient 
+          taskId={taskId} 
+          skillId={skill.id} 
+          skillSlug={slug} 
+          requirements={requirements}
+          evidenceKeys={evidenceKeys}
+        />
       ) : (
         <Card>
           <CardContent className="pt-4 text-center">

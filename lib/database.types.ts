@@ -461,6 +461,7 @@ export type Database = {
           passed: boolean | null
           practice_task_id: string
           score: number | null
+          skill_id: string | null
           submission: Json | null
           user_id: string
         }
@@ -471,6 +472,7 @@ export type Database = {
           passed?: boolean | null
           practice_task_id: string
           score?: number | null
+          skill_id?: string | null
           submission?: Json | null
           user_id: string
         }
@@ -481,6 +483,7 @@ export type Database = {
           passed?: boolean | null
           practice_task_id?: string
           score?: number | null
+          skill_id?: string | null
           submission?: Json | null
           user_id?: string
         }
@@ -492,11 +495,19 @@ export type Database = {
             referencedRelation: "practice_tasks"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "practice_attempts_skill_id_fkey"
+            columns: ["skill_id"]
+            isOneToOne: false
+            referencedRelation: "skills"
+            referencedColumns: ["id"]
+          },
         ]
       }
       practice_tasks: {
         Row: {
           context: string | null
+          evidence_keys: Json
           hints: Json
           id: string
           is_published: boolean
@@ -508,6 +519,7 @@ export type Database = {
         }
         Insert: {
           context?: string | null
+          evidence_keys?: Json
           hints?: Json
           id?: string
           is_published?: boolean
@@ -519,6 +531,7 @@ export type Database = {
         }
         Update: {
           context?: string | null
+          evidence_keys?: Json
           hints?: Json
           id?: string
           is_published?: boolean
@@ -1272,38 +1285,10 @@ export const Constants = {
     Enums: {},
   },
 } as const
-
-// Application Domain Union Types
-export type { ExperienceLevel, PrimaryGoal } from "./auth/schemas";
-
-export type MasteryState =
-  | "not_started"
-  | "developing"
-  | "practicing"
-  | "proficient"
-  | "strong";
-
+export type MasteryState = "not_started" | "developing" | "practicing" | "proficient" | "strong";
 export type Difficulty = "beginner" | "intermediate" | "advanced";
-
-export type EvidenceType =
-  | "lesson"
-  | "practice"
-  | "quiz"
-  | "troubleshooting"
-  | "project"
-  | "retention"
-  | "mission";
-
-export type AIMode =
-  | "tutor"
-  | "coach"
-  | "troubleshooter"
-  | "interviewer"
-  | "reviewer";
-
 export type LessonStatus = "not_started" | "in_progress" | "completed";
-export type ProjectStatus = "not_started" | "in_progress" | "submitted" | "completed";
-export type MissionStatus = "not_started" | "in_progress" | "completed" | "skipped";
+export type EvidenceType = "lesson" | "quiz" | "practice" | "troubleshooting" | "project";
 export type QuestionType = "single" | "multi" | "scenario";
 
 // Convenience table row aliases
@@ -1333,4 +1318,3 @@ export type MissionTaskProgress = Database["public"]["Tables"]["mission_task_pro
 export type Note = Database["public"]["Tables"]["notes"]["Row"];
 export type AIConversation = Database["public"]["Tables"]["ai_conversations"]["Row"];
 export type AIMessage = Database["public"]["Tables"]["ai_messages"]["Row"];
-
