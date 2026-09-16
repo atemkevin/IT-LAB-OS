@@ -22,8 +22,15 @@ export function getClientEnv() {
 export function validateEnv() {
   const result = envSchema.safeParse(process.env);
   if (!result.success) {
-    console.warn("Environment validation warning:", result.error.format());
-    return null;
+    const formatted = result.error.format();
+    const missing = Object.entries(formatted)
+      .filter(([key]) => key !== "_errors")
+      .map(([key, value]) => key)
+      .join(", ");
+    throw new Error(
+      `Environment validation failed. Missing or invalid variables: ${missing}. ` +
+        `Please check your .env.local file and ensure all required variables are set.`,
+    );
   }
   return result.data;
 }

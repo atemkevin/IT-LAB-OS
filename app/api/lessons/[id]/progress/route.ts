@@ -9,6 +9,7 @@ import { getAdminClient } from "@/lib/supabase/admin";
 import { startLesson, completeLesson } from "@/lib/learning/lessons";
 import { upsertSkillProgress } from "@/lib/learning/progress";
 import { calculateKnowledgeEvidence } from "@/lib/mastery/knowledge";
+import { rateLimit } from "@/lib/rate-limit";
 
 const bodySchema = z.object({
   action: z.enum(["start", "complete"]),
@@ -26,6 +27,15 @@ export async function POST(
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Rate limit: 20 lesson progress updates per minute per user
+    const limit = rateLimit(`lesson-progress:${user.id}`, 20, 60_000);
+    if (!limit.success) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Please slow down." },
+        { status: 429, headers: { "X-RateLimit-Remaining": String(limit.remaining), "X-RateLimit-Reset": String(limit.resetAt) } }
+      );
     }
 
     const body = await request.json();

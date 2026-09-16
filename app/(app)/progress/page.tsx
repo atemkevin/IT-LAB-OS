@@ -1,7 +1,32 @@
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { getProgressMetrics } from "@/lib/learning/dashboard";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 
-export default function ProgressPage() {
+export default async function ProgressPage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const metrics = await getProgressMetrics(user.id);
+
+  const dimensions = [
+    { label: "Knowledge (Quizzes & Reading)", value: metrics.knowledgeAvg, weight: 30, color: "var(--color-brand)" },
+    { label: "Hands-on Practice Tasks", value: metrics.practiceAvg, weight: 20, color: "var(--color-positive)" },
+    { label: "Incident & Lab Scenarios", value: metrics.troubleshootingAvg, weight: 25, color: "var(--color-warning)" },
+    { label: "Capstone & Applied Projects", value: metrics.projectAvg, weight: 15, color: "var(--color-info)" },
+    { label: "Spaced Repetition & Retention", value: metrics.retentionAvg, weight: 10, color: "var(--color-mastery-strong)" },
+  ] as const;
+
+  const distribution = [
+    { label: "Strong (85-100%)", count: metrics.distribution.strong, color: "var(--color-mastery-strong)" },
+    { label: "Proficient (70-84%)", count: metrics.distribution.proficient, color: "var(--color-mastery-proficient)" },
+    { label: "Practicing (50-69%)", count: metrics.distribution.practicing, color: "var(--color-mastery-practicing)" },
+    { label: "Developing (30-49%)", count: metrics.distribution.developing, color: "var(--color-mastery-developing)" },
+    { label: "Not Started (0-29%)", count: metrics.distribution.notStarted, color: "var(--color-mastery-not-started)" },
+  ] as const;
+
   return (
     <div className="space-y-6">
       <div>
@@ -20,45 +45,18 @@ export default function ProgressPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-[var(--color-text-secondary)]">Knowledge (Quizzes & Reading)</span>
-                <span className="font-mono text-[var(--color-text-primary)]">30%</span>
+            {dimensions.map((dim) => (
+              <div key={dim.label}>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-[var(--color-text-secondary)]">{dim.label}</span>
+                  <span className="font-mono text-[var(--color-text-primary)]">{dim.weight}%</span>
+                </div>
+                <Progress value={dim.value} />
+                <p className="mt-0.5 text-right text-[10px] text-[var(--color-text-tertiary)]">
+                  Avg {dim.value}%
+                </p>
               </div>
-              <Progress value={0} />
-            </div>
-
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-[var(--color-text-secondary)]">Hands-on Practice Tasks</span>
-                <span className="font-mono text-[var(--color-text-primary)]">20%</span>
-              </div>
-              <Progress value={0} />
-            </div>
-
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-[var(--color-text-secondary)]">Incident & Lab Scenarios</span>
-                <span className="font-mono text-[var(--color-text-primary)]">25%</span>
-              </div>
-              <Progress value={0} />
-            </div>
-
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-[var(--color-text-secondary)]">Capstone & Applied Projects</span>
-                <span className="font-mono text-[var(--color-text-primary)]">15%</span>
-              </div>
-              <Progress value={0} />
-            </div>
-
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-[var(--color-text-secondary)]">Spaced Repetition & Retention</span>
-                <span className="font-mono text-[var(--color-text-primary)]">10%</span>
-              </div>
-              <Progress value={0} />
-            </div>
+            ))}
           </CardContent>
         </Card>
 
@@ -68,26 +66,17 @@ export default function ProgressPage() {
             <CardDescription>Skill count across proficiency tiers</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-xs">
-            <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-2">
-              <span className="text-[var(--color-mastery-strong)] font-semibold">Strong (85-100%)</span>
-              <span className="font-mono">0 skills</span>
-            </div>
-            <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-2">
-              <span className="text-[var(--color-mastery-proficient)] font-semibold">Proficient (70-84%)</span>
-              <span className="font-mono">0 skills</span>
-            </div>
-            <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-2">
-              <span className="text-[var(--color-mastery-practicing)] font-semibold">Practicing (50-69%)</span>
-              <span className="font-mono">0 skills</span>
-            </div>
-            <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-2">
-              <span className="text-[var(--color-mastery-developing)] font-semibold">Developing (30-49%)</span>
-              <span className="font-mono">0 skills</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--color-mastery-not-started)] font-semibold">Not Started (0-29%)</span>
-              <span className="font-mono">26 skills</span>
-            </div>
+            {distribution.map((tier, i) => (
+              <div
+                key={tier.label}
+                className={`flex items-center justify-between ${i < distribution.length - 1 ? "border-b border-[var(--color-border)] pb-2" : ""}`}
+              >
+                <span className="font-semibold" style={{ color: tier.color }}>
+                  {tier.label}
+                </span>
+                <span className="font-mono">{tier.count} skills</span>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>

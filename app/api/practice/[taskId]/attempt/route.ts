@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { evaluatePracticeEvidence } from "@/lib/learning/practice";
 import { upsertSkillProgress } from "@/lib/learning/progress";
+import { rateLimit } from "@/lib/rate-limit";
 
 const bodySchema = z.object({
   // skillId is deprecated from client, but we keep it optional so we don't break the payload contract
@@ -28,6 +29,15 @@ export async function POST(
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Rate limit: 10 practice submissions per minute per user
+    const limit = rateLimit(`practice:${user.id}`, 10, 60_000);
+    if (!limit.success) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Please wait before submitting another practice attempt." },
+        { status: 429, headers: { "X-RateLimit-Remaining": String(limit.remaining), "X-RateLimit-Reset": String(limit.resetAt) } }
+      );
     }
 
     // Verify task exists and load its true skill_id

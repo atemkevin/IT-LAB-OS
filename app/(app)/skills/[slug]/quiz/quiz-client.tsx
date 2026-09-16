@@ -44,6 +44,11 @@ export default function QuizClient({ questions, skillSlug }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answers }),
       });
+      if (res.status === 429) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Too many attempts. Please wait a minute before trying again.");
+        return;
+      }
       if (!res.ok) throw new Error("Failed to submit quiz");
       const data: QuizResult = await res.json();
       setResult(data);
@@ -124,6 +129,8 @@ export default function QuizClient({ questions, skillSlug }: Props) {
                 return (
                   <button
                     key={option.id}
+                    type="button"
+                    aria-pressed={isSelected}
                     onClick={() => toggleOption(question.id, option.id, isSingle)}
                     className={`w-full text-left rounded-md border px-3 py-2.5 text-sm transition-colors ${
                       isSelected

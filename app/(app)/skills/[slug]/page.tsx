@@ -6,6 +6,7 @@ import { Badge, MasteryBadge, DifficultyBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ArrowLeft, BookOpen, CheckCircle2, Clock, HelpCircle, Lock, Terminal, Zap } from "lucide-react";
+import { LessonProgressButton } from "@/components/lesson-progress-button";
 
 const MASTERY_WEIGHT_LABELS = [
   { key: "knowledge_score", label: "Knowledge", weight: "30%" },
@@ -155,13 +156,10 @@ export default async function SkillDetailPage({
                       {status === "completed" && <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />}
                       {status === "in_progress" && <span className="text-xs text-[var(--color-brand)]">In Progress</span>}
                     </div>
-                    <Link
-                      href={`/lessons/${lesson.id}`}
-                      className="text-xs text-[var(--color-brand)] hover:underline flex items-center gap-1"
-                    >
-                      <BookOpen className="h-3 w-3" />
-                      {status === "completed" ? "Review" : status === "in_progress" ? "Continue" : "Start"}
-                    </Link>
+                    <LessonProgressButton
+                      lessonId={lesson.id}
+                      initialStatus={status as "not_started" | "in_progress" | "completed"}
+                    />
                   </div>
                 );
               })

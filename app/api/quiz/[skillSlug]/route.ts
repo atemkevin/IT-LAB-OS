@@ -9,6 +9,7 @@ import { getAdminClient } from "@/lib/supabase/admin";
 import { getSafeQuizQuestions, gradeQuiz } from "@/lib/learning/quizzes";
 import { upsertSkillProgress } from "@/lib/learning/progress";
 import { calculateKnowledgeEvidence } from "@/lib/mastery/knowledge";
+import { rateLimit } from "@/lib/rate-limit";
 
 const submitSchema = z.object({
   answers: z.record(z.string(), z.array(z.string())),
@@ -54,6 +55,15 @@ export async function POST(
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Rate limit: 5 quiz submissions per minute per user
+    const limit = rateLimit(`quiz:${user.id}`, 5, 60_000);
+    if (!limit.success) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Please wait before submitting another quiz." },
+        { status: 429, headers: { "X-RateLimit-Remaining": String(limit.remaining), "X-RateLimit-Reset": String(limit.resetAt) } }
+      );
     }
 
     const skillId = await getSkillIdBySlug(skillSlug);

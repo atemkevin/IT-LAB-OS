@@ -41,3 +41,7 @@ next-env.d.ts
 # Editor
 .vscode/settings.json
 .idea/
+
+# Agent/IDE state (Codebuddy, CommandCode)
+.codebuddy/
+.commandcode/

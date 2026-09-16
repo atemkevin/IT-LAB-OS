@@ -1,9 +1,25 @@
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { getDashboardMetrics } from "@/lib/learning/dashboard";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Target, Zap, Clock, Trophy } from "lucide-react";
+import { Target, Zap, Clock, Trophy, ArrowRight, BookOpen } from "lucide-react";
 import Link from "next/link";
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const metrics = await getDashboardMetrics(user.id);
+
+  const missionStatusLabel =
+    metrics.dailyMission?.status === "completed"
+      ? "Completed"
+      : metrics.dailyMission?.status === "in_progress"
+        ? "In Progress"
+        : "Ready";
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -25,7 +41,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-xs text-[var(--color-text-tertiary)]">Overall Mastery</p>
-              <p className="text-xl font-bold text-[var(--color-text-primary)]">0%</p>
+              <p className="text-xl font-bold text-[var(--color-text-primary)]">{metrics.overallMastery}%</p>
             </div>
           </CardContent>
         </Card>
@@ -37,7 +53,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-xs text-[var(--color-text-tertiary)]">Skills In Progress</p>
-              <p className="text-xl font-bold text-[var(--color-text-primary)]">0</p>
+              <p className="text-xl font-bold text-[var(--color-text-primary)]">{metrics.skillsInProgress}</p>
             </div>
           </CardContent>
         </Card>
@@ -49,7 +65,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-xs text-[var(--color-text-tertiary)]">Daily Mission</p>
-              <p className="text-xl font-bold text-[var(--color-text-primary)]">Ready</p>
+              <p className="text-xl font-bold text-[var(--color-text-primary)]">{missionStatusLabel}</p>
             </div>
           </CardContent>
         </Card>
@@ -61,7 +77,11 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-xs text-[var(--color-text-tertiary)]">Learning Time</p>
-              <p className="text-xl font-bold text-[var(--color-text-primary)]">0m</p>
+              <p className="text-xl font-bold text-[var(--color-text-primary)]">
+                {metrics.learningTimeMinutes >= 60
+                  ? `${Math.floor(metrics.learningTimeMinutes / 60)}h ${metrics.learningTimeMinutes % 60}m`
+                  : `${metrics.learningTimeMinutes}m`}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -79,28 +99,59 @@ export default function DashboardPage() {
             <Badge variant="brand">Daily Target</Badge>
           </CardHeader>
           <CardContent>
-            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-              <h4 className="text-sm font-semibold text-[var(--color-text-primary)]">
-                Start with Linux Fundamentals
-              </h4>
-              <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
-                Master core terminal navigation, permissions, and file management to unlock advanced networking and systems administration.
-              </p>
-              <div className="mt-4 flex items-center gap-3">
-                <Link
-                  href="/mission"
-                  className="rounded-lg bg-[var(--color-brand)] px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-[var(--color-brand-hover)]"
-                >
-                  Start Mission
-                </Link>
-                <Link
-                  href="/learn"
-                  className="rounded-lg border border-[var(--color-border)] px-4 py-2 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-raised)]"
-                >
-                  View Learning Path
-                </Link>
+            {metrics.dailyMission ? (
+              <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+                <h4 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  {metrics.dailyMission.title}
+                </h4>
+                <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
+                  {metrics.dailyMission.objective}
+                </p>
+                <div className="mt-3 flex items-center gap-2 text-xs text-[var(--color-text-tertiary)]">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>{metrics.dailyMission.durationMinutes} min</span>
+                </div>
+                <div className="mt-4 flex items-center gap-3">
+                  <Link
+                    href="/mission"
+                    className="rounded-lg bg-[var(--color-brand)] px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-[var(--color-brand-hover)]"
+                  >
+                    Start Mission
+                  </Link>
+                  <Link
+                    href="/learn"
+                    className="rounded-lg border border-[var(--color-border)] px-4 py-2 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-raised)]"
+                  >
+                    View Learning Path
+                  </Link>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+                <h4 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  {metrics.recommendedSkill
+                    ? `Continue with ${metrics.recommendedSkill}`
+                    : "Start with Linux Fundamentals"}
+                </h4>
+                <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
+                  Master core terminal navigation, permissions, and file management to unlock advanced networking and systems administration.
+                </p>
+                <div className="mt-4 flex items-center gap-3">
+                  <Link
+                    href="/mission"
+                    className="rounded-lg bg-[var(--color-brand)] px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-[var(--color-brand-hover)]"
+                  >
+                    Start Mission
+                  </Link>
+                  <Link
+                    href="/learn"
+                    className="rounded-lg border border-[var(--color-border)] px-4 py-2 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-raised)]"
+                  >
+                    View Learning Path
+                  </Link>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -131,6 +182,13 @@ export default function DashboardPage() {
             >
               <span className="font-medium text-[var(--color-text-primary)]">Ask AI Mentor</span>
               <span className="text-[var(--color-brand)]">Open →</span>
+            </Link>
+            <Link
+              href="/progress"
+              className="flex items-center justify-between rounded-lg border border-[var(--color-border)] p-3 text-xs transition-colors hover:bg-[var(--color-surface-raised)]"
+            >
+              <span className="font-medium text-[var(--color-text-primary)]">View Progress</span>
+              <ArrowRight className="h-3.5 w-3.5 text-[var(--color-brand)]" />
             </Link>
           </CardContent>
         </Card>
