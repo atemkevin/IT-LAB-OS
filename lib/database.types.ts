@@ -1185,7 +1185,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      record_daily_activity: {
+        Args: { p_today: string; p_user_id: string }
+        Returns: {
+          current_streak: number
+          last_activity_date: string
+          longest_streak: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
@@ -1313,6 +1320,15 @@ export type CompositeTypes<
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
 
+export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
+  public: {
+    Enums: {},
+  },
+} as const
+
 export type MasteryState = "not_started" | "developing" | "practicing" | "proficient" | "strong";
 export type Difficulty = "beginner" | "intermediate" | "advanced";
 export type LessonStatus = "not_started" | "in_progress" | "completed";
@@ -1344,17 +1360,8 @@ export type LearningSession = Database["public"]["Tables"]["learning_sessions"][
 export type DailyMission = Database["public"]["Tables"]["daily_missions"]["Row"];
 export type MissionTaskProgress = Database["public"]["Tables"]["mission_task_progress"]["Row"];
 
-export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
-  public: {
-    Enums: {},
-  },
-} as const
+
 
 export type Note = Database["public"]["Tables"]["notes"]["Row"];
 export type AIConversation = Database["public"]["Tables"]["ai_conversations"]["Row"];
 export type AIMessage = Database["public"]["Tables"]["ai_messages"]["Row"];
-
-

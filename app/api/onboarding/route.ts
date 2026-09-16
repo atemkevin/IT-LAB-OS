@@ -52,19 +52,31 @@ export async function POST(request: NextRequest) {
       completedAt: new Date().toISOString(),
     };
 
-    // 3. Save profile using session-scoped authenticated client (respects RLS, user.id derived from session)
-    const { error: profileError } = await supabase
+    // 3. Persist the profile with the trusted server client.
+    //
+    // `environment` (assessment results) and `onboarding_done` are
+    // server-authoritative columns: migration 008 revokes learner UPDATE on
+    // them so onboarding cannot be forged through PostgREST. user.id is taken
+    // from the verified session above — it is never client-supplied.
+    const admin = getAdminClient();
+    const displayName =
+      user.user_metadata?.display_name || user.email?.split("@")[0] || "Learner";
+
+    const { error: profileError } = await admin
       .from("profiles")
-      .upsert({
-        id: user.id,
-        display_name: user.user_metadata?.display_name || user.email?.split("@")[0] || "Learner",
-        experience_level,
-        primary_goal,
-        daily_minutes,
-        environment: environmentData as any,
-        onboarding_done: true,
-        updated_at: new Date().toISOString(),
-      });
+      .upsert(
+        {
+          id: user.id,
+          display_name: displayName,
+          experience_level,
+          primary_goal,
+          daily_minutes,
+          environment: environmentData as unknown as import("@/lib/database.types").Json,
+          onboarding_done: true,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" },
+      );
 
     if (profileError) {
       console.error("Failed to update profile:", profileError);
@@ -74,8 +86,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. Record assessment evidence in mastery_evidence using admin client (idempotent baseline evidence)
-    const admin = getAdminClient();
+    // 4. Record assessment evidence in mastery_evidence (idempotent baseline evidence)
 
     // Look up ID for the recommended skill if available
     const { data: skillRow } = await admin

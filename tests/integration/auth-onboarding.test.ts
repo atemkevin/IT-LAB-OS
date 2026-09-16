@@ -132,16 +132,18 @@ describe("Phase 3 — Authentication, Profile & Onboarding Integration Tests", (
 
   describe("2. PROFILE: Creation, Ownership, Update & Isolation", () => {
     it("creates profile linked strictly to authenticated user ID", async () => {
+      // The profile row is provisioned by the handle_new_user trigger on
+      // signup, so the learner updates rather than inserts. Only
+      // learner-editable columns are writable (migration 008).
       const { data, error } = await user1Client
         .from("profiles")
-        .upsert({
-          id: user1Id,
+        .update({
           display_name: "Engineer Alpha",
           experience_level: "Intermediate",
           daily_minutes: 60,
           primary_goal: "Network Engineer",
-          onboarding_done: false,
         })
+        .eq("id", user1Id)
         .select()
         .single();
 
@@ -150,7 +152,46 @@ describe("Phase 3 — Authentication, Profile & Onboarding Integration Tests", (
       expect(data?.display_name).toBe("Engineer Alpha");
       expect(data?.experience_level).toBe("Intermediate");
       expect(data?.primary_goal).toBe("Network Engineer");
+      // onboarding_done is server-authoritative; still at its signup default.
       expect(data?.onboarding_done).toBe(false);
+    });
+
+    it("rejects learner attempts to forge server-authoritative profile columns", async () => {
+      const forgedEnvironment = { recommendedFirstSkill: "hacked", assessmentScore: 100 };
+
+      const streakForge = await user1Client
+        .from("profiles")
+        .update({ current_streak: 999 })
+        .eq("id", user1Id)
+        .select();
+
+      const onboardingForge = await user1Client
+        .from("profiles")
+        .update({ onboarding_done: true })
+        .eq("id", user1Id)
+        .select();
+
+      const environmentForge = await user1Client
+        .from("profiles")
+        .update({ environment: forgedEnvironment })
+        .eq("id", user1Id)
+        .select();
+
+      // 42501 = insufficient_privilege
+      expect(streakForge.error?.code).toBe("42501");
+      expect(onboardingForge.error?.code).toBe("42501");
+      expect(environmentForge.error?.code).toBe("42501");
+
+      // Confirm nothing was actually written.
+      const { data: after } = await admin
+        .from("profiles")
+        .select("current_streak, onboarding_done, environment")
+        .eq("id", user1Id)
+        .single();
+
+      expect(after?.current_streak).toBe(0);
+      expect(after?.onboarding_done).toBe(false);
+      expect((after?.environment as Record<string, unknown>)?.recommendedFirstSkill).toBeUndefined();
     });
 
     it("allows user to update their own profile", async () => {
@@ -353,20 +394,26 @@ describe("Phase 3 — Authentication, Profile & Onboarding Integration Tests", (
         "Network Engineer",
       );
 
-      // Complete onboarding for User 1
-      const { data: updatedProfile, error: profileErr } = await user1Client
+      // Complete onboarding for User 1.
+      // `onboarding_done` and `environment` are server-authoritative
+      // (migration 008 revokes learner UPDATE on them), so this mirrors what
+      // the trusted /api/onboarding route does: it writes them with the
+      // service-role client after deriving user.id from the session.
+      const environmentData = {
+        tools: ["Linux", "Docker", "GitHub"],
+        startingLevel: assessmentResult.startingLevel,
+        recommendedFirstSkill: assessmentResult.recommendedFirstSkill,
+        assessmentScore: assessmentResult.percentageScore,
+        completedAt: new Date().toISOString(),
+      };
+
+      const { data: updatedProfile, error: profileErr } = await admin
         .from("profiles")
         .update({
           onboarding_done: true,
           experience_level: "Experienced",
           primary_goal: "Network Engineer",
-          environment: {
-            tools: ["Linux", "Docker", "GitHub"],
-            startingLevel: assessmentResult.startingLevel,
-            recommendedFirstSkill: assessmentResult.recommendedFirstSkill,
-            assessmentScore: assessmentResult.percentageScore,
-            completedAt: new Date().toISOString(),
-          },
+          environment: environmentData,
         })
         .eq("id", user1Id)
         .select()
@@ -429,11 +476,11 @@ describe("Phase 3 — Authentication, Profile & Onboarding Integration Tests", (
         "Network Engineer",
       );
 
-      // 1. Idempotent profile update
-      await user1Client
+      // 1. Idempotent profile update via the trusted server path
+      //    (server-authoritative columns are not learner-writable).
+      await admin
         .from("profiles")
-        .upsert({
-          id: user1Id,
+        .update({
           display_name: "Senior Engineer Alpha",
           experience_level: newAssessmentResult.startingLevel,
           primary_goal: "Network Engineer",
@@ -445,7 +492,8 @@ describe("Phase 3 — Authentication, Profile & Onboarding Integration Tests", (
             assessmentScore: newAssessmentResult.percentageScore,
             completedAt: new Date().toISOString(),
           },
-        });
+        })
+        .eq("id", user1Id);
 
       // 2. Idempotent evidence update: check existing record and update in place
       const { data: existingEvidence } = await admin

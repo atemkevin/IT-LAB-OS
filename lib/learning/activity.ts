@@ -2,21 +2,24 @@
  * lib/learning/activity.ts
  *
  * Activity logging + streak tracking for the /progress timeline.
+ * Server-only.
  *
- * Fixes from the v0 implementation:
- *   - Timezone consistency: todayString() now returns a YYYY-MM-DD string
- *     built from the local date components. Yesterday is computed the same
- *     way, so streaks no longer mis-fire around midnight in non-UTC zones.
- *   - Atomicity: the streak UPDATE filter includes the prior `last_activity_date`
- *     so two parallel calls cannot both see "yesterday" and double-increment.
- *     The function retries once on filter mismatch.
- *   - Type safety: `details` is cast to the Json type the typed Supabase client
- *     expects, keeping the call site ergonomic.
+ * Streak updates are delegated to the `record_daily_activity` Postgres
+ * function (migration 007) which performs the read-modify-write inside a
+ * single transaction with a row lock. Doing it client-side previously led to
+ * two defects:
  *
- * Server-only — uses the regular session client (RLS-protected).
+ *   1. PostgREST `.lt()` does not match NULL, so a brand-new learner's first
+ *      activity never started their streak.
+ *   2. The reset branch also zeroed `longest_streak`, wiping the all-time
+ *      record whenever a learner returned after a gap.
+ *
+ * The calendar date is computed in the app's local timezone and passed in, so
+ * the streak day boundary matches the learner's clock rather than the
+ * database server's (UTC).
  */
 import { createClient } from "@/lib/supabase/server";
-import { todayString, yesterdayString } from "@/lib/utils";
+import { todayString } from "@/lib/utils";
 import type { Json } from "@/lib/database.types";
 
 export type ActivityType =
@@ -26,16 +29,11 @@ export type ActivityType =
   | "troubleshooting_completed";
 
 /**
- * Log an activity and update the user's streak if the calendar date has moved.
+ * Log an activity and advance the learner's daily streak.
  *
- * Concurrency-safe via compare-and-swap on `last_activity_date`:
- *   - Branch A: last_activity_date === yesterday  → streak += 1
- *   - Branch B: last_activity_date is null or older than yesterday → streak = 1
- *   - Branch C: last_activity_date === today already → no-op (already counted)
- *
- * The activity_log INSERT is independent and always attempted, even if the
- * streak update fails — losing one streak increment is less harmful than
- * losing the audit trail.
+ * Returns true when both the activity row and the streak update succeeded.
+ * The activity INSERT and the streak RPC are separate statements: the audit
+ * row is written first so a streak failure never loses the activity record.
  */
 export async function logActivity(
   userId: string,
@@ -45,59 +43,27 @@ export async function logActivity(
   const supabase = await createClient();
   const today = todayString();
 
-  // 1. Activity log (idempotent enough; multiple logs on the same day are fine)
   const { error: logError } = await supabase.from("user_activity_logs").insert({
     user_id: userId,
     activity_type: type,
     details: details as Json,
     activity_date: today,
   });
+
   if (logError) {
     console.error("Failed to log activity:", logError);
     return false;
   }
 
-  const yesterday = yesterdayString();
+  const { error: streakError } = await supabase.rpc("record_daily_activity", {
+    p_user_id: userId,
+    p_today: today,
+  });
 
-  // Branch A: yesterday → today. Atomic: only one caller wins; the rest see
-  // last_activity_date change to today and fall through to Branch C (no-op).
-  const { data: rolledOver } = await supabase
-    .from("profiles")
-    .update({
-      current_streak: 1,
-      longest_streak: 1,
-      last_activity_date: today,
-    })
-    .eq("id", userId)
-    .lt("last_activity_date", yesterday) // NULL or older than yesterday
-    .select("id")
-    .single();
-
-  if (rolledOver) {
-    return true;
+  if (streakError) {
+    console.error("Failed to update streak:", streakError);
+    return false;
   }
 
-  // Branch A': exactly yesterday → today, streak += 1.
-  // We update current_streak + 1 with the CAS filter. Read result determines
-  // whether we also need to bump longest_streak.
-  const { data: prev } = await supabase
-    .from("profiles")
-    .select("current_streak, longest_streak")
-    .eq("id", userId)
-    .eq("last_activity_date", yesterday)
-    .maybeSingle();
-
-  if (prev) {
-    const newStreak = (prev.current_streak ?? 0) + 1;
-    const newLongest = Math.max(newStreak, prev.longest_streak ?? 0);
-    await supabase
-      .from("profiles")
-      .update({ current_streak: newStreak, longest_streak: newLongest })
-      .eq("id", userId)
-      .eq("last_activity_date", yesterday);
-    return true;
-  }
-
-  // Branch C: today already, or in-flight state mismatch. No-op.
   return true;
 }

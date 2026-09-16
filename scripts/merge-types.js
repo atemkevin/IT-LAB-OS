@@ -1,26 +1,51 @@
-const fs = require('fs');
-const path = require('path');
+/**
+ * scripts/merge-types.js
+ *
+ * Merges the auto-generated Supabase schema types with this project's
+ * hand-maintained type aliases.
+ *
+ * Inputs:
+ *   lib/database.types.ts.gen   — output of `supabase gen types typescript`
+ *   scripts/db-type-aliases.txt — the project's enums + Row aliases
+ *
+ * Output:
+ *   lib/database.types.ts       — generated schema + aliases, in that order
+ *
+ * Why: `supabase gen types` overwrites the whole file, so hand-written
+ * aliases must live outside it and be re-appended on every regeneration.
+ * Keeping the fragment in its own file means regeneration can never
+ * silently drop the enums again.
+ */
+const fs = require("fs");
+const path = require("path");
 
-const root = path.resolve(__dirname, '..');
-const current = fs.readFileSync(path.join(root, 'lib/database.types.ts'), 'utf8');
-const generated = fs.readFileSync(path.join(root, 'lib/database.types.ts.gen'), 'utf8');
+const root = path.resolve(__dirname, "..");
+const generatedPath = path.join(root, "lib/database.types.ts.gen");
+const fragmentPath = path.join(root, "scripts/db-type-aliases.txt");
+const outPath = path.join(root, "lib/database.types.ts");
 
-// Find the "export const Constants" trailing closure `} as const` end
-const endMarker = '} as const';
+const generated = fs.readFileSync(generatedPath, "utf8");
+const fragment = fs.readFileSync(fragmentPath, "utf8").trim();
+
+// The generated file ends with `export const Constants = { ... } as const`.
+const endMarker = "} as const";
 const endIdx = generated.lastIndexOf(endMarker);
-if (endIdx === -1) throw new Error('Cannot find end marker in generated types');
+if (endIdx === -1) throw new Error("Cannot find end marker in generated types");
 
-const headEnd = endIdx + endMarker.length;
-const prefix = generated.slice(0, headEnd);
+const prefix = generated.slice(0, endIdx + endMarker.length);
+const merged = `${prefix}\n\n${fragment}\n`;
 
-// Extract alias lines from current file
-const aliasStart = current.indexOf('export type Note');
-if (aliasStart === -1) throw new Error('Cannot find aliases in current types');
-const aliases = current.slice(aliasStart);
+// Guard against the regression that prompted this rewrite.
+for (const required of [
+  "export type MasteryState",
+  "export type Difficulty",
+  "export type Note",
+  "export type AIMessage",
+]) {
+  if (!merged.includes(required)) {
+    throw new Error(`Merge would drop required declaration: ${required}`);
+  }
+}
 
-const merged = prefix + '\n\n' + aliases + '\n';
-fs.writeFileSync(path.join(root, 'lib/database.types.ts'), merged);
-console.log('Merged. New size:', merged.length);
-console.log('Contains user_activity_logs:', merged.includes('user_activity_logs'));
-console.log('Contains current_streak:', merged.includes('current_streak'));
-console.log('Contains export type Note:', merged.includes('export type Note'));
+fs.writeFileSync(outPath, merged);
+console.log(`Merged types -> lib/database.types.ts (${merged.length} bytes)`);
