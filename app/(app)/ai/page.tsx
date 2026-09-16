@@ -1,18 +1,37 @@
 "use client";
 
+/**
+ * /ai — AI Engineering Mentor
+ *
+ * Mode-aware chat interface backed by /api/ai/chat with conversation
+ * persistence and streaming responses.
+ */
 import { useState, useRef, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Bot, Send, Sparkles, User, AlertCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Bot, Send, Sparkles, User, AlertCircle, BookOpen, Wrench, MessageSquare, Target, BarChart3, Loader2 } from "lucide-react";
+
+type MentorMode = "tutor" | "coach" | "troubleshooter" | "interviewer" | "reviewer";
 
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
 }
 
+const MODES: Array<{ id: MentorMode; label: string; icon: React.ReactNode; description: string }> = [
+  { id: "tutor", label: "Tutor", icon: <BookOpen className="h-3.5 w-3.5" />, description: "Clear explanations with examples" },
+  { id: "coach", label: "Coach", icon: <Target className="h-3.5 w-3.5" />, description: "Progress-aware study advice" },
+  { id: "troubleshooter", label: "Troubleshooter", icon: <Wrench className="h-3.5 w-3.5" />, description: "Diagnostic reasoning for labs" },
+  { id: "interviewer", label: "Interviewer", icon: <MessageSquare className="h-3.5 w-3.5" />, description: "Simulates a technical interview" },
+  { id: "reviewer", label: "Reviewer", icon: <BarChart3 className="h-3.5 w-3.5" />, description: "Summarises learning, identifies gaps" },
+];
+
 export default function AIPage() {
+  const [mode, setMode] = useState<MentorMode>("tutor");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +41,21 @@ export default function AIPage() {
   const scrollToBottom = useCallback(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
+
+  // Auto-detect context from URL (e.g. /ai?skillId=...) — lazy init, runs once
+  const [context] = useState<{ skillId?: string } | null>(() => {
+    if (typeof window === "undefined") return null;
+    const skillId = new URLSearchParams(window.location.search).get("skillId");
+    return skillId ? { skillId } : null;
+  });
+
+  function switchMode(newMode: MentorMode) {
+    setMode(newMode);
+    // Start fresh conversation when switching modes
+    setMessages([]);
+    setConversationId(null);
+    setError(null);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,14 +77,19 @@ export default function AIPage() {
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMessages }),
+        body: JSON.stringify({
+          messages: newMessages,
+          mode,
+          conversationId: conversationId ?? undefined,
+          context: context ?? undefined,
+        }),
         signal: abortRef.current.signal,
       });
 
       if (res.status === 429) {
         const data = await res.json().catch(() => ({}));
         setError(data.error || "Too many messages. Please wait a moment.");
-        setMessages((prev) => prev.slice(0, -1)); // Remove empty assistant message
+        setMessages((prev) => prev.slice(0, -1));
         return;
       }
 
@@ -59,9 +98,12 @@ export default function AIPage() {
         throw new Error(data.error || "Failed to get response");
       }
 
+      // Capture conversation id from response headers
+      const responseConvId = res.headers.get("X-Conversation-Id");
+      if (responseConvId) setConversationId(responseConvId);
+
       if (!res.body) throw new Error("No response body");
 
-      // Read SSE stream
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let assistantContent = "";
@@ -97,7 +139,7 @@ export default function AIPage() {
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "An unexpected error occurred");
-      setMessages((prev) => prev.slice(0, -1)); // Remove empty assistant message
+      setMessages((prev) => prev.slice(0, -1));
     } finally {
       setLoading(false);
       abortRef.current = null;
@@ -109,46 +151,73 @@ export default function AIPage() {
     abortRef.current?.abort();
   }
 
+  const currentModeDef = MODES.find((m) => m.id === mode)!;
   const hasMessages = messages.length > 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">AI Engineering Mentor</h1>
-          <p className="text-sm text-[var(--color-text-tertiary)]">
-            Grounding assistance in Tutor, Coach, Troubleshooter, Interviewer, or Reviewer modes.
-          </p>
-        </div>
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">AI Engineering Mentor</h1>
+        <p className="text-sm text-[var(--color-text-tertiary)]">
+          Your personal IT learning assistant. Choose a mode and start a session.
+        </p>
+      </div>
+
+      {/* Mode selector */}
+      <div className="flex flex-wrap gap-2">
+        {MODES.map((m) => (
+          <Button
+            key={m.id}
+            variant={mode === m.id ? "default" : "outline"}
+            size="sm"
+            onClick={() => switchMode(m.id)}
+            disabled={loading}
+          >
+            {m.icon}
+            {m.label}
+          </Button>
+        ))}
       </div>
 
       <Card className="flex h-[600px] flex-col">
         <CardHeader className="border-b border-[var(--color-border)] pb-3">
           <div className="flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
-              <Bot className="h-4 w-4" />
+              {currentModeDef.icon}
             </div>
-            <div>
-              <CardTitle className="text-sm">Mentor Session</CardTitle>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-sm">{currentModeDef.label} Mode</CardTitle>
+                {conversationId && (
+                  <Badge variant="default" className="text-[10px]">Session active</Badge>
+                )}
+              </div>
               <CardDescription className="text-[11px]">
-                Ask for explanations, hints on difficult labs, or mock technical interview questions.
+                {currentModeDef.description}
               </CardDescription>
             </div>
           </div>
         </CardHeader>
 
         <CardContent className="flex flex-1 flex-col p-4 overflow-hidden">
-          {/* Messages area */}
           <div className="flex-1 overflow-y-auto space-y-4 pr-1 -mr-1">
             {!hasMessages ? (
               <div className="flex h-full flex-1 items-center justify-center text-center">
                 <div className="max-w-sm space-y-2">
                   <Sparkles className="mx-auto h-8 w-8 text-[var(--color-brand)]" />
                   <p className="text-sm font-medium text-[var(--color-text-primary)]">
-                    How can I assist your learning today?
+                    {mode === "tutor" && "Ask for explanations or how things work."}
+                    {mode === "coach" && "Get personalized study advice based on your progress."}
+                    {mode === "troubleshooter" && "Stuck on a lab? Describe what you're seeing."}
+                    {mode === "interviewer" && "Ready for a mock technical interview?"}
+                    {mode === "reviewer" && "Get a summary of what you've learned and what to review next."}
                   </p>
                   <p className="text-xs text-[var(--color-text-tertiary)]">
-                    Try asking: &quot;Why does chmod 755 grant read/execute to group and others?&quot; or &quot;Guide me through diagnosing an unresponsive systemd unit.&quot;
+                    {mode === "tutor" && 'Try: "Why does chmod 755 grant read/execute to group?"'}
+                    {mode === "coach" && 'Try: "What should I focus on today?"'}
+                    {mode === "troubleshooter" && 'Try: "My nginx service won\'t start, what should I check?"'}
+                    {mode === "interviewer" && 'Try: "Start a Linux networking interview."'}
+                    {mode === "reviewer" && 'Try: "Summarize what I\'ve learned this week."'}
                   </p>
                 </div>
               </div>
@@ -182,7 +251,7 @@ export default function AIPage() {
                       <div className="whitespace-pre-wrap">
                         {msg.content}
                         {msg.role === "assistant" && loading && i === messages.length - 1 && !msg.content && (
-                          <span className="inline-block h-4 w-4 animate-pulse rounded-full bg-[var(--color-brand)]/50" />
+                          <Loader2 className="inline-block h-4 w-4 animate-spin text-[var(--color-brand)]/50" />
                         )}
                       </div>
                     ) : null}
@@ -199,12 +268,21 @@ export default function AIPage() {
             <div ref={scrollRef} />
           </div>
 
-          {/* Input area */}
           <form onSubmit={handleSubmit} className="mt-4 flex gap-2">
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask your AI mentor a technical question..."
+              placeholder={
+                mode === "tutor"
+                  ? "Ask for an explanation..."
+                  : mode === "coach"
+                    ? "Ask for study advice..."
+                    : mode === "troubleshooter"
+                      ? "Describe the problem you're seeing..."
+                      : mode === "interviewer"
+                        ? "Ready for a question..."
+                        : "Ask for a review..."
+              }
               className="flex-1"
               disabled={loading}
             />
