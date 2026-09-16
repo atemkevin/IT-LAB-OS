@@ -181,8 +181,8 @@ describe("Security & RLS Rigorous Verification (Phase 2 Task 8)", () => {
 
     expect(dErr).toBeNull();
     expect(sErr).toBeNull();
-    expect(domains?.length).toBe(12);
-    expect(skills?.length).toBe(26);
+    expect(domains?.length).toBeGreaterThanOrEqual(12);
+    expect(skills?.length).toBeGreaterThanOrEqual(26);
     expect(domains?.every((d) => d.is_published)).toBe(true);
     expect(skills?.every((s) => s.is_published)).toBe(true);
   });

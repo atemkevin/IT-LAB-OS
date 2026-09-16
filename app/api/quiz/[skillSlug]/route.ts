@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { getSafeQuizQuestions, gradeQuiz } from "@/lib/learning/quizzes";
 import { upsertSkillProgress } from "@/lib/learning/progress";
+import { calculateKnowledgeEvidence } from "@/lib/mastery/knowledge";
 
 const submitSchema = z.object({
   answers: z.record(z.string(), z.array(z.string())),
@@ -66,14 +67,14 @@ export async function POST(
       return NextResponse.json({ error: "Invalid answers format" }, { status: 400 });
     }
 
+    // gradeQuiz will record the attempt and evidence
     const result = await gradeQuiz(skillId, user.id, parsed.data.answers);
 
-    // Update quiz/knowledge scores
-    if (result.passed) {
-      await upsertSkillProgress(user.id, skillId, {
-        knowledge_score: Math.max(result.score, 0),
-      });
-    }
+    // Recalculate authoritative knowledge score using all evidence
+    const knowledgeScore = await calculateKnowledgeEvidence(user.id, skillId);
+    await upsertSkillProgress(user.id, skillId, {
+      knowledge_score: knowledgeScore,
+    });
 
     return NextResponse.json(result);
   } catch (err) {

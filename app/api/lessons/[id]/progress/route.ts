@@ -5,12 +5,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getAdminClient } from "@/lib/supabase/admin";
 import { startLesson, completeLesson } from "@/lib/learning/lessons";
 import { upsertSkillProgress } from "@/lib/learning/progress";
+import { calculateKnowledgeEvidence } from "@/lib/mastery/knowledge";
 
 const bodySchema = z.object({
   action: z.enum(["start", "complete"]),
-  skillId: z.string().uuid(),
+  // We keep skillId in schema for backward compatibility, but we will override it with the authoritative one
+  skillId: z.string().uuid().optional(), 
 });
 
 export async function POST(
@@ -31,33 +34,33 @@ export async function POST(
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
 
-    const { action, skillId } = parsed.data;
+    const { action } = parsed.data;
+
+    // Load lesson to get authoritative skill_id
+    const admin = getAdminClient();
+    const { data: lesson } = await admin
+      .from("lessons")
+      .select("skill_id")
+      .eq("id", lessonId)
+      .maybeSingle();
+
+    if (!lesson) {
+      return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
+    }
+
+    const authoritativeSkillId = lesson.skill_id;
 
     if (action === "start") {
       await startLesson(user.id, lessonId);
       return NextResponse.json({ success: true, status: "in_progress" });
     }
 
-    const wasNew = await completeLesson(user.id, lessonId, skillId);
+    const wasNew = await completeLesson(user.id, lessonId, authoritativeSkillId);
 
     if (wasNew) {
-      const { count: totalLessons } = await supabase
-        .from("lessons")
-        .select("*", { count: "exact", head: true })
-        .eq("skill_id", skillId)
-        .eq("is_published", true);
-
-      const { count: completedLessons } = await supabase
-        .from("user_lesson_progress")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .eq("status", "completed");
-
-      const knowledgeScore = Math.min(
-        Math.round(((completedLessons ?? 1) / (totalLessons ?? 1)) * 100),
-        100
-      );
-      await upsertSkillProgress(user.id, skillId, { knowledge_score: knowledgeScore });
+      // Recalculate authoritative knowledge score for this skill
+      const knowledgeScore = await calculateKnowledgeEvidence(user.id, authoritativeSkillId);
+      await upsertSkillProgress(user.id, authoritativeSkillId, { knowledge_score: knowledgeScore });
     }
 
     return NextResponse.json({ success: true, status: "completed", wasNew });

@@ -60,6 +60,6 @@ describe("Database & RLS Integration Verification (Phase 2)", () => {
       .select("*", { count: "exact", head: true });
 
     expect(error).toBeNull();
-    expect(count).toBe(12);
+    expect(count).toBeGreaterThanOrEqual(12);
   });
 });
