@@ -1,4 +1,4 @@
-﻿import { notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSkillDetail } from "@/lib/learning/skills";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -152,7 +152,12 @@ export default async function SkillDetailPage({
                   <div key={lesson.id} className="flex items-center justify-between rounded-md border border-[var(--color-border)] px-3 py-2">
                     <div className="flex items-center gap-2 text-sm">
                       <span className="text-xs font-mono text-[var(--color-text-tertiary)] w-5">{i + 1}.</span>
-                      <span className="text-[var(--color-text-secondary)]">{lesson.title}</span>
+                      <Link
+                        href={`/lessons/${lesson.id}`}
+                        className="font-medium text-[var(--color-text-primary)] hover:text-[var(--color-brand)] hover:underline"
+                      >
+                        {lesson.title}
+                      </Link>
                       {status === "completed" && <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />}
                       {status === "in_progress" && <span className="text-xs text-[var(--color-brand)]">In Progress</span>}
                     </div>
