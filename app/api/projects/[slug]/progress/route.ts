@@ -63,7 +63,7 @@ export async function POST(
     if (parsed.data.progress !== undefined) updateData.progress = parsed.data.progress;
     if (parsed.data.submission !== undefined) updateData.submission = parsed.data.submission;
 
-    const { data: progress, error } = await supabase
+    const { data: progress, error } = await admin
       .from("user_project_progress")
       .upsert(updateData, { onConflict: "user_id,project_id" })
       .select("*")
@@ -72,6 +72,34 @@ export async function POST(
     if (error) {
       console.error("[project-progress]", error);
       return NextResponse.json({ error: "Failed to update progress" }, { status: 500 });
+    }
+
+    if (parsed.data.status === "completed") {
+      const { upsertSkillProgress } = await import("@/lib/learning/progress");
+      const { data: projectSkills } = await admin
+        .from("project_skills")
+        .select("skill_id")
+        .eq("project_id", project.id);
+
+      for (const ps of projectSkills ?? []) {
+        await admin.from("mastery_evidence").insert({
+          user_id: user.id,
+          skill_id: ps.skill_id,
+          evidence_type: "project",
+          score: 100,
+          metadata: { project_id: project.id, slug, completed_at: new Date().toISOString() },
+        });
+
+        await upsertSkillProgress(user.id, ps.skill_id, {
+          project_score: 100,
+        });
+      }
+
+      const { logActivity } = await import("@/lib/learning/activity");
+      await logActivity(user.id, "project_completed", { projectId: project.id, slug });
+
+      const { evaluateAchievements } = await import("@/lib/achievements/service");
+      await evaluateAchievements(admin, user.id);
     }
 
     return NextResponse.json({ progress });

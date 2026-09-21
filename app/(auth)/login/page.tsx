@@ -9,10 +9,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 
+function sanitizeRedirect(url: string | null): string {
+  if (!url) return "/dashboard";
+  if (url.startsWith("/") && !url.startsWith("//")) {
+    return url;
+  }
+  return "/dashboard";
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo") || "/dashboard";
+  const redirectTo = sanitizeRedirect(searchParams.get("redirectTo"));
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -61,7 +69,7 @@ function LoginForm() {
         <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--color-brand)]">
           <span className="text-base font-bold text-white">IT</span>
         </div>
-        <CardTitle className="text-xl">Sign In</CardTitle>
+        <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Sign In</h1>
         <CardDescription>
           Access your personalized IT Lab OS workspace
         </CardDescription>

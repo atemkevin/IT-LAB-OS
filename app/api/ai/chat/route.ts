@@ -20,6 +20,28 @@ import type { MentorMode } from "@/lib/ai/types";
 
 const MENTOR_MODE_VALUES = ["tutor", "coach", "troubleshooter", "interviewer", "reviewer"] as const;
 
+const labContextSchema = z.object({
+  scenarioSlug: z.string().optional(),
+  scenarioTitle: z.string().optional(),
+  hintLevel: z.number().int().min(0).max(5).optional(),
+  recentCommands: z
+    .array(
+      z.object({
+        command: z.string(),
+        output: z.string().optional(),
+      }),
+    )
+    .optional(),
+  files: z
+    .array(
+      z.object({
+        path: z.string(),
+        content: z.string(),
+      }),
+    )
+    .optional(),
+});
+
 const bodySchema = z.object({
   messages: z
     .array(
@@ -38,6 +60,7 @@ const bodySchema = z.object({
       scenarioId: z.string().uuid().optional(),
     })
     .optional(),
+  labContext: labContextSchema.optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -71,12 +94,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { messages, mode, conversationId: existingConvId, context: reqContext } = parsed.data;
+    const { messages, mode, conversationId: existingConvId, context: reqContext, labContext } = parsed.data;
 
     const apiKey = process.env.AI_API_KEY;
     const model = process.env.AI_MODEL;
     const baseUrl = process.env.AI_BASE_URL;
     if (!apiKey || !model || !baseUrl) {
+      if (labContext) {
+        return generateMockCoachResponse(labContext, messages);
+      }
       return NextResponse.json(
         { error: "AI service not configured. Check AI_API_KEY, AI_MODEL, and AI_BASE_URL." },
         { status: 503 },
@@ -85,7 +111,7 @@ export async function POST(request: NextRequest) {
 
     // Load learner context for the system prompt
     const userContext = await loadUserContext(user.id);
-    const systemPrompt = buildSystemPrompt(mode as MentorMode, userContext);
+    const systemPrompt = buildSystemPrompt(mode as MentorMode, userContext, labContext);
 
     // Conversation management: load history or create new
     let convId: string;
@@ -206,3 +232,62 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+/**
+ * Fallback generator for lab coaching when AI_API_KEY is not configured.
+ * Provides high-quality Socratic hints without crashing offline/development runs.
+ */
+function generateMockCoachResponse(
+  labContext: z.infer<typeof labContextSchema>,
+  messages: Array<{ role: string; content: string }>,
+) {
+  const lastUserMsg = messages[messages.length - 1]?.content.toLowerCase() || "";
+  let responseText = "I'm inspecting your container environment.";
+
+  if (lastUserMsg.includes("crash") || lastUserMsg.includes("fail") || lastUserMsg.includes("why")) {
+    if (labContext.scenarioSlug === "node-crash") {
+      responseText =
+        "Looking at your `server.js` file, the server is attempting to start on a port variable in `app.listen()`. Take a close look at line 12: does the variable name match the definition on line 5? Try running `node server.js` to see the exact ReferenceError.";
+    } else if (labContext.scenarioSlug === "log-triage") {
+      responseText =
+        "The disk volume is filled with runaway logs. Try running `ls -lh var/log` or `du -sh var/log/*` in your terminal to see which file is consuming excessive storage, then inspect its end with `tail -n 20`. Remember to truncate only the offending log, not vital system logs.";
+    } else if (labContext.scenarioSlug === "api-cors-error") {
+      responseText =
+        "The client at `https://client.internal-lab.net` is failing CORS preflight. Inspect the `Access-Control-Allow-Origin` header in `server.js`. Is it set to allow this specific client origin or a wildcard?";
+    } else if (labContext.scenarioSlug === "env-config-crash") {
+      responseText =
+        "The configuration loader cannot initialize the database connection. Compare your `.env` against `.env.example`. Check both the variable names for spelling typos (e.g., `DB_HOSTT`) and ensure `DB_PORT` is a valid number rather than a string.";
+    } else {
+      responseText =
+        "Let's break down the issue systematically. What was the exact command you ran in the terminal, and what error output or status code did you observe?";
+    }
+  } else if (lastUserMsg.includes("check") || lastUserMsg.includes("syntax") || lastUserMsg.includes("review")) {
+    responseText =
+      "I've analyzed your container files. Run `node server.js` or `node .verify.js` in the terminal to test your changes. Check if any variable names or syntax errors still remain!";
+  } else {
+    responseText =
+      "What symptom or error message did the terminal display? If you share what you've tried so far, we can walk through the diagnostic steps together.";
+  }
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      const payload = {
+        choices: [{ delta: { content: responseText } }],
+      };
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+      controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Mentor-Mode": "troubleshooter",
+    },
+  });
+}
+

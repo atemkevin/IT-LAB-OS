@@ -41,7 +41,7 @@ describe("Database & RLS Integration Verification (Phase 2)", () => {
 
     expect(error).toBeNull();
     expect(data).toBeDefined();
-    expect(data!.length).toBe(5);
+    expect(data!.length).toBe(9);
   });
 
   it("enforces RLS: anonymous clients receive empty result from quiz_options", async () => {

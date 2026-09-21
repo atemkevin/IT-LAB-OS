@@ -1,6 +1,7 @@
 "use client";
 
 import { useOptimistic, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { BookOpen, CheckCircle2, Loader2 } from "lucide-react";
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
  * when the user starts or continues a lesson.
  */
 export function LessonProgressButton({ lessonId, initialStatus }: Props) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [optimisticStatus, setOptimisticStatus] = useOptimistic(
     initialStatus,
@@ -57,7 +59,7 @@ export function LessonProgressButton({ lessonId, initialStatus }: Props) {
         }
 
         // Navigate to lesson after successful start
-        window.location.href = `/lessons/${lessonId}`;
+        router.push(`/lessons/${lessonId}`);
       } catch {
         setOptimisticStatus(initialStatus);
       }

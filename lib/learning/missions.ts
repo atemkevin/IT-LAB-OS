@@ -15,6 +15,7 @@ export interface MissionTask {
   description: string;
   type: "lesson" | "practice" | "quiz" | "troubleshooting";
   ref_id?: string;
+  skill_slug?: string;
 }
 
 export interface MissionData {
@@ -94,6 +95,7 @@ export function buildMissionTasks(
   practiceScore: number,
   lessons: { id: string; title: string }[],
   practiceTasks: { id: string; title: string }[],
+  skillSlug?: string,
 ): MissionTask[] {
   const tasks: MissionTask[] = [];
 
@@ -106,6 +108,7 @@ export function buildMissionTasks(
       description: `Study the lesson "${lesson.title}" to strengthen your understanding of ${skillName}.`,
       type: "lesson",
       ref_id: lesson.id,
+      skill_slug: skillSlug,
     });
   }
 
@@ -117,6 +120,7 @@ export function buildMissionTasks(
       description: `Complete the hands-on practice task "${task.title}" to apply what you've learned.`,
       type: "practice",
       ref_id: task.id,
+      skill_slug: skillSlug,
     });
   }
 
@@ -126,6 +130,7 @@ export function buildMissionTasks(
       title: `Test: ${skillName} Quiz`,
       description: `Take the quiz for ${skillName} to validate your knowledge.`,
       type: "quiz",
+      skill_slug: skillSlug,
     });
   }
 
@@ -135,6 +140,7 @@ export function buildMissionTasks(
       title: `Explore: ${skillName}`,
       description: `Start learning ${skillName} by reading the skill overview and first lesson.`,
       type: "lesson",
+      skill_slug: skillSlug,
     });
   }
 
@@ -146,18 +152,17 @@ export function buildMissionTasks(
  * Uses admin client to INSERT (no RLS INSERT policy on daily_missions).
  */
 export async function generateDailyMission(userId: string): Promise<MissionData | null> {
-  const supabase = await createClient();
   const admin = getAdminClient();
   const today = todayString();
 
   // Fetch user's skill progress (all skills they've started)
-  const { data: progressRows } = await supabase
+  const { data: progressRows } = await admin
     .from("user_skill_progress")
     .select("skill_id, mastery_score, mastery_state, knowledge_score, practice_score")
     .eq("user_id", userId);
 
   // Also fetch all published skills for fallback
-  const { data: allSkills } = await supabase
+  const { data: allSkills } = await admin
     .from("skills")
     .select("id, slug, name, description, difficulty, estimated_minutes")
     .eq("is_published", true)
@@ -165,7 +170,13 @@ export async function generateDailyMission(userId: string): Promise<MissionData 
 
   if (!allSkills || allSkills.length === 0) return null;
 
-  // Determine the weakest skill
+  // 1. Check for any skills due for Spaced Repetition (SM-2) review
+  const { getDueSkillReviews } = await import("@/lib/spaced-repetition/service");
+  const dueReviews = await getDueSkillReviews(userId, 1);
+  let isSpacedRepetition = false;
+  let retentionReason = "";
+
+  // Determine target skill
   let targetSkill: { id: string; slug: string; name: string; description: string | null; difficulty: string; estimated_minutes: number };
 
   const progress = (progressRows ?? []) as Pick<
@@ -173,7 +184,17 @@ export async function generateDailyMission(userId: string): Promise<MissionData 
     "skill_id" | "mastery_score" | "mastery_state" | "knowledge_score" | "practice_score"
   >[];
 
-  if (progress.length > 0) {
+  if (dueReviews.length > 0) {
+    const due = dueReviews[0];
+    const skill = allSkills.find((s) => s.id === due.skillId);
+    if (skill) {
+      targetSkill = skill;
+      isSpacedRepetition = true;
+      retentionReason = `Spaced Repetition Review: Your retention for ${skill.name} has decayed to ${due.currentRetention}%. Completing this mission resets decay and consolidates long-term memory.`;
+    } else {
+      targetSkill = allSkills[0];
+    }
+  } else if (progress.length > 0) {
     // Sort by mastery score ascending — weakest first
     const sorted = [...progress].sort((a, b) => (a.mastery_score ?? 0) - (b.mastery_score ?? 0));
     const weakestId = sorted[0].skill_id;
@@ -217,10 +238,15 @@ export async function generateDailyMission(userId: string): Promise<MissionData 
     skillProgress?.practice_score ?? 0,
     (lessons ?? []).map((l: { id: string; title: string }) => ({ id: l.id, title: l.title })),
     (practiceTasks ?? []).map((p: { id: string; title: string }) => ({ id: p.id, title: p.title })),
+    targetSkill.slug,
   );
 
-  const missionTitle = `${targetSkill.name} Focus Session`;
-  const objective = `Strengthen your mastery of ${targetSkill.name} through targeted study and practice.`;
+  const missionTitle = isSpacedRepetition
+    ? `Memory Retention: ${targetSkill.name}`
+    : `${targetSkill.name} Focus Session`;
+  const objective = isSpacedRepetition
+    ? `Strengthen and lock in your memory retention for ${targetSkill.name} using spaced repetition.`
+    : `Strengthen your mastery of ${targetSkill.name} through targeted study and practice.`;
   const context = targetSkill.description
     ? `${targetSkill.name}: ${targetSkill.description}`
     : `Focus on ${targetSkill.name}.`;
@@ -233,7 +259,9 @@ export async function generateDailyMission(userId: string): Promise<MissionData 
 
   const successCriteria = tasks.map((t, i) => `Task ${i + 1}: Complete "${t.title}"`);
 
-  const recommendationReason = progress.length > 0
+  const recommendationReason = isSpacedRepetition
+    ? retentionReason
+    : progress.length > 0
     ? `${targetSkill.name} is your lowest-scoring skill at ${skillProgress?.mastery_score ?? 0}% mastery. Focus here for maximum growth.`
     : `You're just starting out. ${targetSkill.name} is the recommended first skill for your learning path.`;
 

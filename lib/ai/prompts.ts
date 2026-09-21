@@ -6,7 +6,7 @@
  * The system prompt is dynamically enriched with the learner's context
  * so the AI can reference actual mastery data and current learning state.
  */
-import type { MentorMode } from "./types";
+import type { MentorMode, LabContext } from "./types";
 import type { UserContext } from "./context";
 
 /** The 5 supported mentor modes. */
@@ -48,8 +48,9 @@ export const MODE_PARAMS: Record<MentorMode, { temperature: number; maxTokens: n
 /**
  * Build the full system prompt for a given mode, injected with learner context.
  */
-export function buildSystemPrompt(mode: MentorMode, ctx: UserContext): string {
+export function buildSystemPrompt(mode: MentorMode, ctx: UserContext, labCtx?: LabContext): string {
   const contextBlock = formatContext(ctx);
+  const labBlock = formatLabContext(labCtx);
 
   switch (mode) {
     case "tutor":
@@ -67,7 +68,7 @@ Rules:
 - Keep responses concise (under 400 words unless the learner asks for depth).
 - Cite the learner's actual mastery data when relevant (see context below).
 
-${contextBlock}`;
+${contextBlock}${labBlock ? `\n\n${labBlock}` : ""}`;
 
     case "coach":
       return `You are a personalized Learning Coach embedded in IT Lab OS — a personal technical learning operating system.
@@ -85,25 +86,32 @@ Rules:
 - If overall mastery is below 30, focus on the fundamentals; above 70, push toward specialization.
 - Keep coaching responses under 200 words.
 
-${contextBlock}`;
+${contextBlock}${labBlock ? `\n\n${labBlock}` : ""}`;
 
-    case "troubleshooter":
+    case "troubleshooter": {
+      const containerInstruction = labBlock
+        ? `- You have direct read access to their live container files, configs, and recent terminal outputs in the active lab environment block below.`
+        : `- When the learner describes a symptom or shares terminal output, help them diagnose the issue.`;
+
       return `You are an expert Troubleshooting Coach embedded in IT Lab OS.
 
 Your role:
 - Guide the learner through diagnostic reasoning step by step.
-- Never give the final answer to a lab scenario — only help them build the diagnostic path.
-- Ask "What have you tried?" and "What did the output tell you?" before suggesting next commands.
-- Use the Socratic method: ask questions that lead them to the answer.
-- When they run a command in the simulator and share output, help them interpret it.
+${containerInstruction}
+- Inspect their actual code and command failures to identify where their reasoning or syntax has gone off-track.
+- Use the Socratic method: ask targeted questions that lead the learner to spot the error themselves.
+- Point them toward relevant diagnostic commands (e.g., \`cat\`, \`grep\`, \`tail\`, \`node server.js\`, \`ls -la\`, \`du -sh\`) to test hypotheses.
 
-Rules:
-- NEVER state the root cause or repair action directly.
-- If the learner asks "what's the answer?", respond: "Let's work through it. What's the first symptom you observed?"
-- If they've used 4+ hints and are frustrated, give a stronger directional nudge without the full answer.
-- Keep responses under 300 words.
+Strict Pedagogical Guardrails:
+- NEVER output the complete code fix or paste the solution directly.
+- NEVER state the root cause directly in your first response (e.g. do NOT say "The bug is on line 12: change potr to port").
+- Instead, guide their attention: "Notice the parameter passed to app.listen() on line 12. Compare how that variable is spelled with the constant declared on line 5."
+- If the learner asks "what's the answer?" or "fix this for me", respond: "Let's diagnose it together. What error message appeared in the terminal when you ran the command?"
+- If they've revealed 4+ hints and are clearly stuck, give a stronger directional nudge without providing the literal code patch.
+- Keep responses focused and concise (under 250 words) with clear steps.
 
-${contextBlock}`;
+${contextBlock}${labBlock ? `\n\n${labBlock}` : ""}`;
+    }
 
     case "interviewer":
       return `You are a senior IT Technical Interviewer embedded in IT Lab OS.
@@ -192,3 +200,61 @@ This learner has not completed onboarding yet. Suggest they start with the onboa
   lines.push(`</learner_context>`);
   return lines.join("\n");
 }
+
+/**
+ * Format the active lab environment (container files and recent commands)
+ * into a structured block for Socratic troubleshooting.
+ */
+function formatLabContext(labCtx?: LabContext): string {
+  if (!labCtx) return "";
+
+  const sections: string[] = ["<active_lab_environment>"];
+
+  if (labCtx.scenarioTitle) {
+    sections.push(
+      `  scenario: "${labCtx.scenarioTitle}"${
+        labCtx.scenarioSlug ? ` (slug: ${labCtx.scenarioSlug})` : ""
+      }`,
+    );
+  }
+
+  if (typeof labCtx.hintLevel === "number") {
+    sections.push(`  hints_revealed_so_far: ${labCtx.hintLevel}/5`);
+  }
+
+  if (labCtx.recentCommands && labCtx.recentCommands.length > 0) {
+    sections.push("  recent_terminal_activity:");
+    for (const cmd of labCtx.recentCommands.slice(-6)) {
+      sections.push(`    - command: "${cmd.command}"`);
+      if (cmd.output) {
+        const truncatedOutput =
+          cmd.output.length > 300
+            ? cmd.output.slice(0, 300) + "... [truncated]"
+            : cmd.output;
+        sections.push(
+          `      output: |-\n        ${truncatedOutput.replace(/\n/g, "\n        ")}`,
+        );
+      }
+    }
+  }
+
+  if (labCtx.files && labCtx.files.length > 0) {
+    sections.push("  live_container_files:");
+    for (const f of labCtx.files) {
+      const truncated =
+        f.content.length > 2500
+          ? f.content.slice(0, 2500) + "\n... [truncated]"
+          : f.content;
+      sections.push(
+        `    - path: "${f.path}"\n      content: |-\n        ${truncated.replace(
+          /\n/g,
+          "\n        ",
+        )}`,
+      );
+    }
+  }
+
+  sections.push("</active_lab_environment>");
+  return sections.join("\n");
+}
+

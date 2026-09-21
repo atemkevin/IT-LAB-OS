@@ -15,9 +15,9 @@
   --color-border-subtle: #1c2233;
 
   /* Brand / Accent */
-  --color-brand: #4f8ef7;
-  --color-brand-hover: #6ba3ff;
-  --color-brand-soft: rgba(79, 142, 247, 0.12);
+  --color-brand: #2563eb;
+  --color-brand-hover: #3b82f6;
+  --color-brand-soft: rgba(37, 99, 235, 0.12);
 
   /* Semantic colors */
   --color-positive: #3ecf8e;
@@ -44,7 +44,7 @@
   /* Text */
   --color-text-primary: #f0f4ff;
   --color-text-secondary: #a8b2cc;
-  --color-text-tertiary: #6b7999;
+  --color-text-tertiary: #94a3b8;
   --color-text-disabled: #3d4d6b;
 
   /* Radius */
@@ -76,7 +76,7 @@ html {
 body {
   background-color: var(--color-base);
   color: var(--color-text-primary);
-  font-family: var(--font-sans, ui-sans-serif, system-ui, -apple-system, sans-serif);
+  font-family: var(--font-inter, ui-sans-serif, system-ui, -apple-system, sans-serif);
   min-height: 100vh;
 }
 

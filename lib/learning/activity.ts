@@ -26,7 +26,8 @@ export type ActivityType =
   | "lesson_completed"
   | "practice_completed"
   | "mission_completed"
-  | "troubleshooting_completed";
+  | "troubleshooting_completed"
+  | "project_completed";
 
 /**
  * Log an activity and advance the learner's daily streak.

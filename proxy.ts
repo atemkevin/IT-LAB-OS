@@ -11,6 +11,10 @@ const PUBLIC_PATHS = [
   "/reset-password",
   "/auth/callback",
   "/api/health",
+  "/portfolio",
+  "/icon",
+  "/apple-icon",
+  "/manifest.webmanifest",
 ];
 
 /**
@@ -30,7 +34,7 @@ function isBypassPath(pathname: string): boolean {
   return BYPASS_PATHS.some((p) => pathname.startsWith(p));
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Skip middleware for static assets and bypass paths

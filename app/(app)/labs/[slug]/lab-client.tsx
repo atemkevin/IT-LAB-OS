@@ -1,19 +1,15 @@
 "use client";
 
-/**
- * Terminal-like interactive client for a troubleshooting scenario.
- *
- * Uses the deterministic simulator API:
- *   POST /api/troubleshooting/[slug]/start
- *   POST /api/troubleshooting/[slug]/command   { attemptId, command }
- *   POST /api/troubleshooting/[slug]/hint     { attemptId }
- *   POST /api/troubleshooting/[slug]/finish   { attemptId, diagnosis, attemptedFix }
- */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Lightbulb, Send, RotateCcw, CheckCircle2, Terminal as TerminalIcon } from "lucide-react";
+import { WebContainer } from "@webcontainer/api";
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import "@xterm/xterm/css/xterm.css";
+import { AILabCoach } from "@/components/labs/ai-lab-coach";
 
 interface Props {
   slug: string;
@@ -29,8 +25,11 @@ interface CommandEntry {
   status: "ok" | "denied";
 }
 
+let webcontainerInstance: WebContainer | null = null;
+
 export default function LabClient({ slug, title, initialHints, rootCause, repairAction }: Props) {
   const [attemptId, setAttemptId] = useState<string | null>(null);
+  const [scenario, setScenario] = useState<any>(null);
   const [lines, setLines] = useState<CommandEntry[]>([]);
   const [input, setInput] = useState("");
   const [hint, setHint] = useState<string | null>(null);
@@ -43,6 +42,47 @@ export default function LabClient({ slug, title, initialHints, rootCause, repair
   const [error, setError] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const terminalRef = useRef<HTMLDivElement>(null);
+  const xtermRef = useRef<Terminal | null>(null);
+
+  const initWebContainer = useCallback(async (fs: any) => {
+    if (!terminalRef.current) return;
+    
+    if (!xtermRef.current) {
+      const term = new Terminal({ convertEol: true, fontSize: 12, fontFamily: "monospace" });
+      const fitAddon = new FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(terminalRef.current);
+      fitAddon.fit();
+      xtermRef.current = term;
+    }
+
+    const term = xtermRef.current;
+    term.write(`\x1b[32mBooting Ephemeral Container for ${title}...\x1b[0m\r\n`);
+
+    try {
+      if (!webcontainerInstance) {
+        webcontainerInstance = await WebContainer.boot();
+      }
+      await webcontainerInstance.mount(fs);
+
+      const process = await webcontainerInstance.spawn("jsh");
+      
+      process.output.pipeTo(new WritableStream({
+        write(data) {
+          term.write(data);
+        }
+      }));
+
+      const inputPipe = process.input.getWriter();
+      term.onData((data) => {
+        inputPipe.write(data);
+      });
+      
+    } catch (err: any) {
+      term.write(`\x1b[31mError booting container: ${err.message}\x1b[0m\r\n`);
+    }
+  }, [title]);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,9 +97,15 @@ export default function LabClient({ slug, title, initialHints, rootCause, repair
         const data = await res.json();
         if (cancelled) return;
         setAttemptId(data.attemptId);
-        setLines([
-          { command: "(scenario started)", output: `Welcome to "${data.scenario.title}". Run diagnostics to investigate.`, status: "ok" },
-        ]);
+        setScenario(data.scenario);
+        
+        if (data.scenario.runnerType === "deterministic") {
+          setLines([
+            { command: "(scenario started)", output: `Welcome to "${data.scenario.title}". Run diagnostics to investigate.`, status: "ok" },
+          ]);
+        } else if (data.scenario.runnerType === "webcontainer") {
+          await initWebContainer(data.scenario.webcontainerFs);
+        }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Failed to start lab";
         setError(msg);
@@ -68,11 +114,13 @@ export default function LabClient({ slug, title, initialHints, rootCause, repair
       }
     })();
     return () => { cancelled = true; };
-  }, [slug]);
+  }, [slug, initWebContainer]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [lines]);
+    if (scenario?.runnerType === "deterministic") {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    }
+  }, [lines, scenario]);
 
   async function runCommand(e: React.FormEvent) {
     e.preventDefault();
@@ -130,11 +178,28 @@ export default function LabClient({ slug, title, initialHints, rootCause, repair
     if (!attemptId || busy) return;
     setBusy(true);
     setError(null);
+    
+    let clientVerificationResult = undefined;
+    if (scenario?.runnerType === "webcontainer" && webcontainerInstance) {
+      try {
+        const process = await webcontainerInstance.spawn("node", [".verify.js"]);
+        let output = "";
+        process.output.pipeTo(new WritableStream({
+          write(data) { output += data; }
+        }));
+        await process.exit;
+        clientVerificationResult = JSON.parse(output.trim());
+      } catch (err) {
+        console.error("Verification failed", err);
+        clientVerificationResult = { passed: false, rootCauseIdentified: false };
+      }
+    }
+
     try {
       const res = await fetch(`/api/troubleshooting/${slug}/finish`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ attemptId, diagnosis, attemptedFix }),
+        body: JSON.stringify({ attemptId, diagnosis, attemptedFix, clientVerificationResult }),
       });
       if (!res.ok) {
         throw new Error((await res.json().catch(() => ({}))).error ?? "Finish failed");
@@ -151,33 +216,53 @@ export default function LabClient({ slug, title, initialHints, rootCause, repair
   }
 
   function reset() {
-    setAttemptId(null);
-    setLines([]);
-    setHint(null);
-    setHintLevel(0);
-    setSubmitted(false);
-    setScore(null);
-    setDiagnosis("");
-    setAttemptedFix("");
-    setError(null);
-    // Re-run start effect
-    (async () => {
-      setBusy(true);
-      const res = await fetch(`/api/troubleshooting/${slug}/start`, { method: "POST" });
-      if (res.ok) {
-        const data = await res.json();
-        setAttemptId(data.attemptId);
-        setLines([
-          { command: "(scenario started)", output: `Welcome to "${data.scenario.title}". Run diagnostics to investigate.`, status: "ok" },
-        ]);
-      }
-      setBusy(false);
-    })();
+    window.location.reload();
   }
 
   const maxHint = initialHints.length;
   const canHint = !submitted && !!attemptId && hintLevel < maxHint;
   const canSubmit = !submitted && !!attemptId;
+
+  const getRecentCommands = useCallback(() => {
+    return lines.map((l) => ({ command: l.command, output: l.output }));
+  }, [lines]);
+
+  const getContainerFiles = useCallback(async () => {
+    if (!webcontainerInstance) return [];
+
+    const fileList: Array<{ path: string; content: string }> = [];
+
+    async function traverse(dir: string) {
+      try {
+        const entries = await webcontainerInstance!.fs.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = dir ? `${dir}/${entry.name}` : entry.name;
+          if (
+            entry.name.startsWith(".git") ||
+            entry.name === "node_modules" ||
+            entry.name === ".verify.js"
+          ) {
+            continue;
+          }
+          if (entry.isDirectory()) {
+            await traverse(fullPath);
+          } else {
+            try {
+              const content = await webcontainerInstance!.fs.readFile(fullPath, "utf-8");
+              fileList.push({ path: fullPath, content });
+            } catch {
+              // skip unreadable
+            }
+          }
+        }
+      } catch {
+        // skip unreadable directories
+      }
+    }
+
+    await traverse("");
+    return fileList;
+  }, []);
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -196,44 +281,53 @@ export default function LabClient({ slug, title, initialHints, rootCause, repair
             </div>
           </CardHeader>
           <CardContent>
-            <div
-              ref={scrollRef}
-              className="h-72 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-base)] p-3 font-mono text-xs"
-            >
-              {lines.map((l, idx) => (
-                <div key={idx} className="mb-2">
-                  <div className="text-[var(--color-brand)]">
-                    learner@it-lab-os:~$ <span className="text-[var(--color-text-primary)]">{l.command}</span>
-                  </div>
-                  <pre
-                    className={
-                      l.status === "denied"
-                        ? "whitespace-pre-wrap text-[var(--color-warning)]"
-                        : "whitespace-pre-wrap text-[var(--color-text-secondary)]"
-                    }
-                  >
-                    {l.output}
-                  </pre>
-                </div>
-              ))}
-              {lines.length === 0 && (
-                <div className="text-[var(--color-text-tertiary)]">Initialising scenario…</div>
-              )}
-            </div>
-
-            <form onSubmit={runCommand} className="mt-3 flex gap-2">
-              <Input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Type a command and press Enter…"
-                disabled={!attemptId || busy || submitted}
-                autoFocus
+            {scenario?.runnerType === "webcontainer" ? (
+              <div 
+                ref={terminalRef} 
+                className="h-80 w-full overflow-hidden rounded-lg bg-black p-2" 
               />
-              <Button type="submit" disabled={!attemptId || busy || submitted || !input.trim()}>
-                <Send className="h-4 w-4" />
-                Run
-              </Button>
-            </form>
+            ) : (
+              <>
+                <div
+                  ref={scrollRef}
+                  className="h-72 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-base)] p-3 font-mono text-xs"
+                >
+                  {lines.map((l, idx) => (
+                    <div key={idx} className="mb-2">
+                      <div className="text-[var(--color-brand)]">
+                        learner@it-lab-os:~$ <span className="text-[var(--color-text-primary)]">{l.command}</span>
+                      </div>
+                      <pre
+                        className={
+                          l.status === "denied"
+                            ? "whitespace-pre-wrap text-[var(--color-warning)]"
+                            : "whitespace-pre-wrap text-[var(--color-text-secondary)]"
+                        }
+                      >
+                        {l.output}
+                      </pre>
+                    </div>
+                  ))}
+                  {lines.length === 0 && (
+                    <div className="text-[var(--color-text-tertiary)]">Initialising scenario…</div>
+                  )}
+                </div>
+
+                <form onSubmit={runCommand} className="mt-3 flex gap-2">
+                  <Input
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="Type a command and press Enter…"
+                    disabled={!attemptId || busy || submitted}
+                    autoFocus
+                  />
+                  <Button type="submit" disabled={!attemptId || busy || submitted || !input.trim()}>
+                    <Send className="h-4 w-4" />
+                    Run
+                  </Button>
+                </form>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -300,6 +394,14 @@ export default function LabClient({ slug, title, initialHints, rootCause, repair
       </div>
 
       <div className="space-y-4">
+        <AILabCoach
+          scenarioSlug={slug}
+          scenarioTitle={title}
+          hintLevel={hintLevel}
+          getContainerFiles={getContainerFiles}
+          getRecentCommands={getRecentCommands}
+        />
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">

@@ -34,3 +34,8 @@ export type MissionTaskProgress = Database["public"]["Tables"]["mission_task_pro
 export type Note = Database["public"]["Tables"]["notes"]["Row"];
 export type AIConversation = Database["public"]["Tables"]["ai_conversations"]["Row"];
 export type AIMessage = Database["public"]["Tables"]["ai_messages"]["Row"];
+export type Notification = Database["public"]["Tables"]["notifications"]["Row"];
+export type Achievement = Database["public"]["Tables"]["achievements"]["Row"];
+export type UserAchievement = Database["public"]["Tables"]["user_achievements"]["Row"];
+export type SpacedRepetitionItem = Database["public"]["Tables"]["spaced_repetition_items"]["Row"];
+

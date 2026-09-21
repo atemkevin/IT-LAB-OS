@@ -1,4 +1,4 @@
-﻿import { notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getLessonById } from "@/lib/learning/lessons";
 import { Card, CardContent } from "@/components/ui/card";
@@ -125,15 +125,24 @@ export default async function LessonPage({
 }
 
 /**
- * Minimal markdown-to-HTML converter.
- * For production, replace with a proper library (marked, remark, etc.).
+ * Markdown-to-HTML converter with HTML escaping to prevent XSS.
  */
 function markdownToHtml(md: string): string {
-  let html = md
-    // Code blocks
-    .replace(/```(\w+)?\n([\s\S]*?)```/g, (_, lang, code) =>
+  // 1. Extract code blocks to avoid double escaping
+  const codeBlocks: string[] = [];
+  let processed = md.replace(/```(\w+)?\n([\s\S]*?)```/g, (_, _lang, code) => {
+    const idx = codeBlocks.length;
+    codeBlocks.push(
       `<pre class="bg-[var(--color-surface-elevated)] rounded p-4 overflow-x-auto text-xs font-mono my-3"><code>${escapeHtml(code.trim())}</code></pre>`
-    )
+    );
+    return `___CODE_BLOCK_${idx}___`;
+  });
+
+  // 2. Escape all raw HTML characters in the text
+  processed = escapeHtml(processed);
+
+  // 3. Process markdown formatting
+  let html = processed
     // Inline code
     .replace(/`([^`]+)`/g, '<code class="bg-[var(--color-surface-elevated)] px-1 rounded text-xs font-mono">$1</code>')
     // Headers
@@ -151,6 +160,9 @@ function markdownToHtml(md: string): string {
     .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc text-sm">$1</li>')
     // Paragraphs
     .replace(/\n\n(.+)/g, '<p class="text-sm my-2">$1</p>');
+
+  // 4. Restore preserved code blocks
+  html = html.replace(/___CODE_BLOCK_(\d+)___/g, (_, idx) => codeBlocks[Number(idx)] || "");
 
   return html;
 }

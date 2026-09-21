@@ -39,6 +39,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      achievements: {
+        Row: {
+          created_at: string
+          description: string
+          icon: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          icon: string
+          id: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          icon?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       ai_conversations: {
         Row: {
           context: Json
@@ -449,6 +473,47 @@ export type Database = {
             columns: ["skill_id"]
             isOneToOne: false
             referencedRelation: "skills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          link: string | null
+          message: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          link?: string | null
+          message: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          link?: string | null
+          message?: string
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -897,6 +962,66 @@ export type Database = {
           },
         ]
       }
+      spaced_repetition_items: {
+        Row: {
+          created_at: string
+          easiness_factor: number
+          history: Json
+          id: string
+          interval_days: number
+          last_reviewed_at: string
+          next_review_due: string
+          repetition_count: number
+          retention_score: number
+          skill_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          easiness_factor?: number
+          history?: Json
+          id?: string
+          interval_days?: number
+          last_reviewed_at?: string
+          next_review_due?: string
+          repetition_count?: number
+          retention_score?: number
+          skill_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          easiness_factor?: number
+          history?: Json
+          id?: string
+          interval_days?: number
+          last_reviewed_at?: string
+          next_review_due?: string
+          repetition_count?: number
+          retention_score?: number
+          skill_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spaced_repetition_items_skill_id_fkey"
+            columns: ["skill_id"]
+            isOneToOne: false
+            referencedRelation: "skills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "spaced_repetition_items_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       troubleshooting_attempts: {
         Row: {
           attempted_fix: string | null
@@ -974,6 +1099,8 @@ export type Database = {
           title: string
           transitions: Json
           verification: Json
+          runner_type: string | null
+          webcontainer_fs: Json | null
         }
         Insert: {
           allowed_commands?: Json
@@ -992,8 +1119,10 @@ export type Database = {
           title: string
           transitions?: Json
           verification?: Json
-        }
-        Update: {
+            runner_type?: string | null
+            webcontainer_fs?: Json | null
+          }
+          Update: {
           allowed_commands?: Json
           description?: string | null
           difficulty?: string | null
@@ -1010,13 +1139,51 @@ export type Database = {
           title?: string
           transitions?: Json
           verification?: Json
-        }
-        Relationships: [
+            runner_type?: string | null
+            webcontainer_fs?: Json | null
+          }
+          Relationships: [
           {
             foreignKeyName: "troubleshooting_scenarios_skill_id_fkey"
             columns: ["skill_id"]
             isOneToOne: false
             referencedRelation: "skills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_achievements: {
+        Row: {
+          achievement_id: string
+          earned_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          achievement_id: string
+          earned_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          achievement_id?: string
+          earned_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_achievements_achievement_id_fkey"
+            columns: ["achievement_id"]
+            isOneToOne: false
+            referencedRelation: "achievements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_achievements_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1365,3 +1532,7 @@ export type MissionTaskProgress = Database["public"]["Tables"]["mission_task_pro
 export type Note = Database["public"]["Tables"]["notes"]["Row"];
 export type AIConversation = Database["public"]["Tables"]["ai_conversations"]["Row"];
 export type AIMessage = Database["public"]["Tables"]["ai_messages"]["Row"];
+export type Notification = Database["public"]["Tables"]["notifications"]["Row"];
+export type Achievement = Database["public"]["Tables"]["achievements"]["Row"];
+export type UserAchievement = Database["public"]["Tables"]["user_achievements"]["Row"];
+export type SpacedRepetitionItem = Database["public"]["Tables"]["spaced_repetition_items"]["Row"];

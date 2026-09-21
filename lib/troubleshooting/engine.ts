@@ -8,7 +8,6 @@
  * NO REAL COMMANDS ARE EXECUTED — this is a deterministic simulator.
  */
 import { getAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import {
   matchesCommand,
   resolveCommandResponse,
@@ -101,8 +100,8 @@ interface ScenRow {
  * publicly readable to authenticated users.
  */
 export async function loadScenarioBySlug(slug: string): Promise<Scenario | null> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
+  const admin = getAdminClient();
+  const { data, error } = await admin
     .from("troubleshooting_scenarios")
     .select(
       "id, slug, title, description, difficulty, skill_id, initial_state, allowed_commands, states, transitions, hints, root_cause, repair_action, verification, scoring_rules, runner_type, webcontainer_fs",
@@ -127,8 +126,8 @@ export async function listScenarios(): Promise<
     skillId: string | null;
   }>
 > {
-  const supabase = await createClient();
-  const { data } = await supabase
+  const admin = getAdminClient();
+  const { data } = await admin
     .from("troubleshooting_scenarios")
     .select("slug, title, description, difficulty, skill_id")
     .eq("is_published", true)
@@ -237,11 +236,10 @@ export async function runCommand(args: {
   attemptId: string;
   command: string;
 }): Promise<{ result: CommandResult; attemptId: string } | null> {
-  const supabase = await createClient();
   const admin = getAdminClient();
 
-  // Load the attempt (RLS ensures users only see their own)
-  const { data: attemptRow, error: aErr } = await supabase
+  // Load the attempt and verify ownership
+  const { data: attemptRow, error: aErr } = await admin
     .from("troubleshooting_attempts")
     .select("*")
     .eq("id", args.attemptId)
@@ -251,7 +249,7 @@ export async function runCommand(args: {
   if (attemptRow.user_id !== args.userId) return null;
 
   // Resolve the scenario from scenario_id
-  const { data: scenRow, error: sErr } = await supabase
+  const { data: scenRow, error: sErr } = await admin
     .from("troubleshooting_scenarios")
     .select("id, slug")
     .eq("id", attemptRow.scenario_id)
@@ -301,10 +299,9 @@ export async function requestHint(args: {
   userId: string;
   attemptId: string;
 }): Promise<HintBundle | null> {
-  const supabase = await createClient();
   const admin = getAdminClient();
 
-  const { data: row } = await supabase
+  const { data: row } = await admin
     .from("troubleshooting_attempts")
     .select("*, troubleshooting_scenarios(slug)")
     .eq("id", args.attemptId)
@@ -356,10 +353,9 @@ export async function finishAttempt(args: {
   attemptedFix?: string;
   clientVerificationResult?: { passed: boolean; rootCauseIdentified: boolean };
 }): Promise<{ score: number; rootCauseIdentified: boolean; resolved: boolean } | null> {
-  const supabase = await createClient();
   const admin = getAdminClient();
 
-  const { data: row } = await supabase
+  const { data: row } = await admin
     .from("troubleshooting_attempts")
     .select("*, troubleshooting_scenarios(slug)")
     .eq("id", args.attemptId)

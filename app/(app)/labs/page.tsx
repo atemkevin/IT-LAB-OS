@@ -17,7 +17,7 @@ export default async function LabsPage() {
   const [scenariosRes, attemptsRes] = await Promise.all([
     supabase
       .from("troubleshooting_scenarios")
-      .select("id, slug, title, description, difficulty")
+      .select("id, slug, title, description, difficulty, runner_type")
       .eq("is_published", true)
       .order("difficulty", { ascending: true }),
     user
@@ -31,7 +31,7 @@ export default async function LabsPage() {
 
   const scenarios = (scenariosRes.data ?? []) as Pick<
     TroubleshootingScenario,
-    "id" | "slug" | "title" | "description" | "difficulty"
+    "id" | "slug" | "title" | "description" | "difficulty" | "runner_type"
   >[];
   const completedSet = new Set(
     (attemptsRes.data ?? []).map((a: Pick<TroubleshootingAttempt, "scenario_id">) => a.scenario_id),
@@ -42,7 +42,7 @@ export default async function LabsPage() {
       <div>
         <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">Troubleshooting Labs</h1>
         <p className="text-sm text-[var(--color-text-tertiary)]">
-          Deterministic incident response drills. Simulated environments, zero infrastructure risk.
+          Practical incident response drills. Interactive containers and simulated diagnostics with zero infrastructure risk.
         </p>
       </div>
 
@@ -55,19 +55,32 @@ export default async function LabsPage() {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {scenarios.map((s) => {
             const completed = completedSet.has(s.id);
+            const isContainer = s.runner_type === "webcontainer";
             return (
               <Card key={s.slug} className="flex flex-col justify-between">
                 <CardHeader>
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-1.5">
                     <DifficultyBadge difficulty={(s.difficulty as Difficulty) ?? "beginner"} />
-                    {completed ? (
-                      <Badge variant="positive">
-                        <CheckCircle2 className="h-3 w-3" />
-                        Solved
-                      </Badge>
-                    ) : (
-                      <Badge variant="default">Simulated</Badge>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {isContainer ? (
+                        <Badge
+                          variant="positive"
+                          className="text-[10px]"
+                        >
+                          Interactive Container
+                        </Badge>
+                      ) : (
+                        <Badge variant="default" className="text-[10px]">
+                          Simulated
+                        </Badge>
+                      )}
+                      {completed && (
+                        <Badge variant="positive" className="text-[10px]">
+                          <CheckCircle2 className="h-3 w-3 mr-0.5" />
+                          Solved
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                   <CardTitle className="mt-3 text-base">{s.title}</CardTitle>
                   <CardDescription>{s.description}</CardDescription>

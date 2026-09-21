@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Target, Zap, Clock, Trophy, ArrowRight, BookOpen } from "lucide-react";
 import Link from "next/link";
+import { RetentionDueCard } from "@/components/dashboard/retention-due-card";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -86,6 +87,9 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Spaced Repetition (SM-2) Retention Tracker */}
+      <RetentionDueCard userId={user.id} />
 
       {/* Main Sections */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

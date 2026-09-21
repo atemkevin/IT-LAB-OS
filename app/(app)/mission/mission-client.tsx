@@ -83,13 +83,17 @@ export default function MissionClient({ mission, taskProgress }: MissionClientPr
   }
 
   function getTaskLink(task: MissionData["tasks"][0]): string | null {
+    const slug = task.skill_slug;
     switch (task.type) {
       case "lesson":
         return task.ref_id ? `/lessons/${task.ref_id}` : null;
       case "practice":
-        return task.ref_id ? `/skills/practice/${task.ref_id}` : null;
+        if (slug && task.ref_id) {
+          return `/skills/${slug}/practice/${task.ref_id}`;
+        }
+        return slug ? `/skills/${slug}` : null;
       case "quiz":
-        return null;
+        return slug ? `/skills/${slug}/quiz` : null;
       default:
         return null;
     }

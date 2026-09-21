@@ -15,16 +15,17 @@ const store = new Map<string, RateLimitEntry>();
 
 const CLEANUP_INTERVAL_MS = 60_000; // 1 minute
 
-// Periodic cleanup to prevent memory leaks
-if (typeof globalThis !== "undefined") {
-  setInterval(() => {
-    const now = Date.now();
-    for (const [key, entry] of store.entries()) {
-      if (entry.resetAt < now) {
-        store.delete(key);
-      }
+let nextCleanup = Date.now() + CLEANUP_INTERVAL_MS;
+
+// Lazy cleanup to prevent memory leaks without using setInterval,
+// which causes issues in Serverless environments and Next.js HMR.
+function cleanup(now: number) {
+  for (const [key, entry] of store.entries()) {
+    if (entry.resetAt < now) {
+      store.delete(key);
     }
-  }, CLEANUP_INTERVAL_MS);
+  }
+  nextCleanup = now + CLEANUP_INTERVAL_MS;
 }
 
 export interface RateLimitResult {
@@ -43,6 +44,12 @@ export interface RateLimitResult {
  */
 export function rateLimit(key: string, limit: number, windowMs: number): RateLimitResult {
   const now = Date.now();
+
+  // Perform lazy cleanup if interval has passed
+  if (now > nextCleanup) {
+    cleanup(now);
+  }
+
   const entry = store.get(key);
 
   if (!entry || entry.resetAt < now) {

@@ -68,7 +68,7 @@ export default function RegisterPage() {
         <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--color-brand)]">
           <span className="text-base font-bold text-white">IT</span>
         </div>
-        <CardTitle className="text-xl">Create Account</CardTitle>
+        <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Create Account</h1>
         <CardDescription>
           Begin your engineering mastery journey with IT Lab OS
         </CardDescription>

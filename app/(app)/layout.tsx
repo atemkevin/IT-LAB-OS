@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
+import { RealtimeProvider } from "@/components/providers/realtime-provider";
 
 /**
  * Layout for all authenticated routes under (app)/.
@@ -32,8 +33,10 @@ export default async function AuthenticatedLayout({
   }
 
   return (
-    <AppShell email={profile.display_name || user.email}>
-      {children}
-    </AppShell>
+    <RealtimeProvider>
+      <AppShell email={profile.display_name || user.email}>
+        {children}
+      </AppShell>
+    </RealtimeProvider>
   );
 }

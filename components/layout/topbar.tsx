@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Menu } from "lucide-react";
 import { SignOutButton } from "@/components/layout/sign-out-button";
+import { NotificationBell } from "@/components/layout/notification-bell";
 
 interface TopbarProps {
   email?: string | null;
@@ -23,6 +24,7 @@ export function Topbar({ email }: TopbarProps) {
       </div>
 
       <div className="ml-auto flex items-center gap-3">
+        <NotificationBell />
         {email && (
           <Link
             href="/profile"

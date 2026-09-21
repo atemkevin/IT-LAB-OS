@@ -14,6 +14,19 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface LabFileSnapshot {
+  path: string;
+  content: string;
+}
+
+export interface LabContext {
+  scenarioSlug?: string;
+  scenarioTitle?: string;
+  hintLevel?: number;
+  recentCommands?: Array<{ command: string; output?: string }>;
+  files?: LabFileSnapshot[];
+}
+
 /** Full request body for POST /api/ai/chat. */
 export interface ChatRequest {
   messages: ChatMessage[];
@@ -24,6 +37,7 @@ export interface ChatRequest {
     lessonId?: string;
     scenarioId?: string;
   };
+  labContext?: LabContext;
 }
 
 /** Response envelope for conversation metadata. */
