@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   Map,
+  BookOpen,
   Zap,
   Target,
   FlaskConical,
@@ -41,6 +42,12 @@ export const primaryNav: NavItem[] = [
     href: "/learn",
     icon: Map,
     description: "Your skill progression map",
+  },
+  {
+    label: "Lessons",
+    href: "/lessons",
+    icon: BookOpen,
+    description: "Interactive curriculum and reading",
   },
   {
     label: "Skills",
