@@ -58,6 +58,8 @@ export interface Scenario {
   rootCause: string;
   repairAction: string;
   verification: string;
+  runnerType: "deterministic" | "webcontainer";
+  webcontainerFs: any;
   scoringRules: {
     diagnosticPathBonus?: number;
     fixBonus?: number;

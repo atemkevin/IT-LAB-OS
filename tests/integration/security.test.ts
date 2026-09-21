@@ -202,6 +202,35 @@ describe("Security & RLS Rigorous Verification (Phase 2 Task 8)", () => {
     expect(Number(after?.progress)).toBe(10);
   });
 
+  it("4c. Learners cannot forge a resolved troubleshooting attempt (migration 009)", async () => {
+    const { data: scenarios } = await admin
+      .from("troubleshooting_scenarios")
+      .select("id")
+      .limit(1);
+    const scenarioId = scenarios![0].id;
+
+    const ins = await userAClient
+      .from("troubleshooting_attempts")
+      .insert({
+        user_id: userAId,
+        scenario_id: scenarioId,
+        resolved: true,
+        root_cause_identified: true,
+        score: 100,
+      })
+      .select();
+
+    expect(ins.error?.code).toBe("42501");
+
+    // Confirm nothing was written.
+    const { count } = await admin
+      .from("troubleshooting_attempts")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userAId)
+      .eq("resolved", true);
+    expect(count ?? 0).toBe(0);
+  });
+
   it("5. Unauthenticated users cannot access private user data", async () => {
     // Distinct anonymous client with no session persistence
     const anon = createClient<Database>(url, anonKey, {

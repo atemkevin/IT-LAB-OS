@@ -23,6 +23,15 @@ interface ScoreInput {
   diagnosis: string | null;
   attemptedFix: string | null;
   resolved: boolean;
+  /**
+   * WebContainer scenarios only. In those, the browser runs the scenario's
+   * `.verify.js` and the server cannot replay it, so the client's verdict
+   * stands in for the diagnosis text match. It is an INPUT to the normal
+   * scoring path — it can never add score beyond the standard weights, and
+   * the result stays clamped to 0–100. Callers must gate this on
+   * `scenario.runnerType === "webcontainer"`.
+   */
+  clientRootCauseIdentified?: boolean;
 }
 
 const DEFAULT_RULES = {
@@ -75,8 +84,9 @@ export function scoreAttempt(input: ScoreInput): AttemptScore {
   const r = { ...DEFAULT_RULES, ...(input.scenario.scoringRules ?? {}) };
 
   const rootCauseIdentified =
-    !!input.diagnosis &&
-    textMentions(input.scenario.rootCause ?? "", input.diagnosis);
+    input.clientRootCauseIdentified ??
+    (!!input.diagnosis &&
+      textMentions(input.scenario.rootCause ?? "", input.diagnosis));
 
   const fixApplied =
     !!input.attemptedFix &&

@@ -15,6 +15,10 @@ const bodySchema = z.object({
   attemptId: z.string().uuid(),
   diagnosis: z.string().max(2000).optional(),
   attemptedFix: z.string().max(2000).optional(),
+  clientVerificationResult: z.object({
+    passed: z.boolean(),
+    rootCauseIdentified: z.boolean(),
+  }).optional(),
 });
 
 export async function POST(
@@ -48,6 +52,7 @@ export async function POST(
       attemptId: parsed.data.attemptId,
       diagnosis: parsed.data.diagnosis,
       attemptedFix: parsed.data.attemptedFix,
+      clientVerificationResult: parsed.data.clientVerificationResult,
     });
 
     if (!result) {

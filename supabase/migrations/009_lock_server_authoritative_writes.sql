@@ -1,29 +1,31 @@
 -- 009_lock_server_authoritative_writes.sql
 --
--- Closes a learner-forgeable write path found during the security audit.
+-- Closes two learner-forgeable write paths found during the security audit.
 --
--- AUDIT FINDING (HIGH): user_lesson_progress was learner-writable.
+-- AUDIT FINDING 1 (HIGH): user_lesson_progress was learner-writable.
 --   `calculateKnowledgeEvidence()` (lib/mastery/knowledge.ts) counts rows
 --   WHERE status='completed' in user_lesson_progress to compute
 --   knowledge_score, which carries 30% of the mastery formula. Because
 --   001_core_schema.sql granted learners INSERT/UPDATE on that table, a
 --   learner could upsert forged 'completed' rows directly through PostgREST
 --   and inflate their own knowledge_score -> mastery_score.
---
 --   Verified empirically before the fix: forging 3 lesson rows moved the
 --   computed lessonScore from 0% to 100%.
+--   startLesson()/completeLesson() (lib/learning/lessons.ts) already write
+--   with the service-role client, so the learner grants were never needed.
 --
---   The application never needed those grants: startLesson() and
---   completeLesson() in lib/learning/lessons.ts both write with the
---   service-role client. Revoking the learner grants therefore breaks
---   nothing and removes the forgery path entirely.
+-- AUDIT FINDING 2 (MEDIUM): troubleshooting_attempts was learner-writable.
+--   The learner INSERT policy let a user insert { score: 100, resolved: true }
+--   directly, forging the "Solved" state shown on /labs without touching the
+--   simulator. startAttempt() has been moved to the service-role client to
+--   match runCommand()/finishAttempt(), so the learner INSERT/UPDATE grants
+--   are no longer required.
 --
--- Reads are unaffected: the SELECT policy "own lesson progress" remains, so
--- learners can still read their own progress. The INSERT/UPDATE policies are
--- left in place but are now unreachable — the privilege is revoked at the
--- table level, which a column-level grant cannot undo.
+-- Reads are unaffected: the SELECT policies ("own lesson progress",
+-- "own troubleshooting attempts") remain in place for learner clients.
 --
--- Note: a column-level REVOKE cannot remove a table-level grant, so this
--- revokes the table-level INSERT/UPDATE privilege outright.
+-- Note: a column-level REVOKE cannot remove a table-level grant, so these
+-- revoke the table-level INSERT/UPDATE privilege outright.
 
 revoke insert, update on public.user_lesson_progress from authenticated, anon;
+revoke insert, update on public.troubleshooting_attempts from authenticated, anon;

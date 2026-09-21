@@ -64,6 +64,8 @@ export function normaliseScenario(row: ScenRow): Scenario {
     rootCause: row.root_cause ?? "",
     repairAction: row.repair_action ?? "",
     verification: typeof row.verification === "string" ? row.verification : "",
+    runnerType: (row.runner_type as "deterministic" | "webcontainer") ?? "deterministic",
+    webcontainerFs: row.webcontainer_fs ?? null,
     scoringRules: scoringRulesJson,
   };
 }
@@ -89,6 +91,8 @@ interface ScenRow {
   repair_action: string | null;
   verification: unknown;
   scoring_rules: unknown;
+  runner_type: string | null;
+  webcontainer_fs: unknown;
 }
 
 /**
@@ -101,7 +105,7 @@ export async function loadScenarioBySlug(slug: string): Promise<Scenario | null>
   const { data, error } = await supabase
     .from("troubleshooting_scenarios")
     .select(
-      "id, slug, title, description, difficulty, skill_id, initial_state, allowed_commands, states, transitions, hints, root_cause, repair_action, verification, scoring_rules",
+      "id, slug, title, description, difficulty, skill_id, initial_state, allowed_commands, states, transitions, hints, root_cause, repair_action, verification, scoring_rules, runner_type, webcontainer_fs",
     )
     .eq("slug", slug)
     .eq("is_published", true)
@@ -146,14 +150,17 @@ export async function listScenarios(): Promise<
  * Start a new attempt for the given user + scenario. Returns the attempt id
  * and initial empty live state.
  *
- * Uses the regular session client so RLS allows the INSERT under
- * `own troubleshooting attempts insert` (user_id = auth.uid()).
+ * Writes with the service-role client: `troubleshooting_attempts` is
+ * server-authoritative (migration 009 revokes learner INSERT/UPDATE), so a
+ * learner cannot forge a resolved attempt or a score. `userId` always comes
+ * from the verified session held by the calling route handler, never from the
+ * request body.
  */
 export async function startAttempt(
   userId: string,
   scenarioSlug: string,
 ): Promise<{ attemptId: string; state: AttemptState; scenario: Scenario } | null> {
-  const supabase = await createClient();
+  const admin = getAdminClient();
   const scenario = await loadScenarioBySlug(scenarioSlug);
   if (!scenario) return null;
 
@@ -165,7 +172,7 @@ export async function startAttempt(
     attemptedFix: null,
   };
 
-  const { data, error } = await supabase
+  const { data, error } = await admin
     .from("troubleshooting_attempts")
     .insert({
       user_id: userId,
@@ -347,6 +354,7 @@ export async function finishAttempt(args: {
   attemptId: string;
   diagnosis?: string;
   attemptedFix?: string;
+  clientVerificationResult?: { passed: boolean; rootCauseIdentified: boolean };
 }): Promise<{ score: number; rootCauseIdentified: boolean; resolved: boolean } | null> {
   const supabase = await createClient();
   const admin = getAdminClient();
@@ -373,13 +381,28 @@ export async function finishAttempt(args: {
     attemptedFix: args.attemptedFix?.trim() || state.attemptedFix,
   };
 
-  const resolved = finalState.currentStateKey === "resolved";
+  // WebContainer scenarios execute their verification in the browser, so the
+  // server cannot replay it and has to accept the client's verdict. That
+  // concession is scoped strictly to those scenarios: for deterministic
+  // scenarios the client verdict is ignored entirely and `resolved` remains a
+  // function of the server-held state machine.
+  const clientVerified =
+    scenario.runnerType === "webcontainer" ? args.clientVerificationResult : undefined;
+
+  const resolved = clientVerified
+    ? clientVerified.passed
+    : finalState.currentStateKey === "resolved";
+
+  // The client verdict is passed INTO the standard scorer rather than applied
+  // to its output, so it cannot mint score beyond the weighted maximum and the
+  // final value stays clamped to 0–100.
   const score = scoreAttempt({
     scenario,
     state: finalState,
     diagnosis: finalState.diagnosis,
     attemptedFix: finalState.attemptedFix,
     resolved,
+    clientRootCauseIdentified: clientVerified?.rootCauseIdentified,
   });
 
   const now = new Date().toISOString();

@@ -65,6 +65,8 @@ function baseScenario(overrides: Partial<Scenario> = {}): Scenario {
     rootCause: "The configured DNS resolver is invalid.",
     repairAction: "Replace the invalid resolver with a working resolver.",
     verification: "nslookup example.com succeeds.",
+    runnerType: "deterministic",
+    webcontainerFs: null,
     scoringRules: {},
     ...overrides,
   };
@@ -263,5 +265,67 @@ describe("scoreAttempt", () => {
     expect(score.score).toBeLessThanOrEqual(20); // some diagnostic credit at most
     expect(score.rootCauseIdentified).toBe(false);
     expect(score.verificationPassed).toBe(false);
+  });
+
+  // WebContainer scenarios let the browser report the root-cause verdict.
+  // That verdict is an INPUT to the scorer, never a post-hoc score bonus, so
+  // it cannot inflate the result beyond the weighted maximum.
+  describe("client-supplied root-cause verdict (webcontainer only)", () => {
+    const webcontainerScenario = () =>
+      baseScenario({ runnerType: "webcontainer" } as Partial<Scenario>);
+
+    it("credits exactly the root-cause weight, not more", () => {
+      const withVerdict = scoreAttempt({
+        scenario: webcontainerScenario(),
+        state: baseState(),
+        diagnosis: null,
+        attemptedFix: null,
+        resolved: true,
+        clientRootCauseIdentified: true,
+      });
+      const without = scoreAttempt({
+        scenario: webcontainerScenario(),
+        state: baseState(),
+        diagnosis: null,
+        attemptedFix: null,
+        resolved: true,
+        clientRootCauseIdentified: false,
+      });
+
+      expect(withVerdict.components.rootCause).toBe(30);
+      expect(without.components.rootCause).toBe(0);
+      // The verdict moves the score by exactly the root-cause weight.
+      expect(withVerdict.score - without.score).toBe(30);
+    });
+
+    it("still clamps the final score to 100 even with every signal true", () => {
+      const score = scoreAttempt({
+        scenario: webcontainerScenario(),
+        state: baseState({
+          commandsRun: [
+            { command: "ping 8.8.8.8", output: "", status: "ok", timestamp: "" },
+            { command: "cat /etc/resolv.conf", output: "", status: "ok", timestamp: "" },
+            { command: "nslookup example.com", output: "", status: "ok", timestamp: "" },
+          ],
+        }),
+        diagnosis: "resolver is invalid",
+        attemptedFix: "replace the invalid resolver",
+        resolved: true,
+        clientRootCauseIdentified: true,
+      });
+      expect(score.score).toBeLessThanOrEqual(100);
+    });
+
+    it("falls back to the diagnosis text match when no verdict is supplied", () => {
+      const score = scoreAttempt({
+        scenario: baseScenario(),
+        state: baseState(),
+        diagnosis: "the resolver is invalid",
+        attemptedFix: null,
+        resolved: false,
+      });
+      expect(score.rootCauseIdentified).toBe(true);
+      expect(score.components.rootCause).toBe(30);
+    });
   });
 });
