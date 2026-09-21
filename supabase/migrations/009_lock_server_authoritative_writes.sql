@@ -1,0 +1,29 @@
+-- 009_lock_server_authoritative_writes.sql
+--
+-- Closes a learner-forgeable write path found during the security audit.
+--
+-- AUDIT FINDING (HIGH): user_lesson_progress was learner-writable.
+--   `calculateKnowledgeEvidence()` (lib/mastery/knowledge.ts) counts rows
+--   WHERE status='completed' in user_lesson_progress to compute
+--   knowledge_score, which carries 30% of the mastery formula. Because
+--   001_core_schema.sql granted learners INSERT/UPDATE on that table, a
+--   learner could upsert forged 'completed' rows directly through PostgREST
+--   and inflate their own knowledge_score -> mastery_score.
+--
+--   Verified empirically before the fix: forging 3 lesson rows moved the
+--   computed lessonScore from 0% to 100%.
+--
+--   The application never needed those grants: startLesson() and
+--   completeLesson() in lib/learning/lessons.ts both write with the
+--   service-role client. Revoking the learner grants therefore breaks
+--   nothing and removes the forgery path entirely.
+--
+-- Reads are unaffected: the SELECT policy "own lesson progress" remains, so
+-- learners can still read their own progress. The INSERT/UPDATE policies are
+-- left in place but are now unreachable — the privilege is revoked at the
+-- table level, which a column-level grant cannot undo.
+--
+-- Note: a column-level REVOKE cannot remove a table-level grant, so this
+-- revokes the table-level INSERT/UPDATE privilege outright.
+
+revoke insert, update on public.user_lesson_progress from authenticated, anon;

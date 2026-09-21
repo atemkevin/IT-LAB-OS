@@ -64,10 +64,12 @@ describe("Security & RLS Rigorous Verification (Phase 2 Task 8)", () => {
       display_name: "User B Private",
     });
 
-    // Seed lesson progress for user B
+    // Seed lesson progress for user B.
+    // Written with the service-role client: migration 009 revokes learner
+    // INSERT/UPDATE on user_lesson_progress (it feeds the knowledge score).
     const { data: lessons } = await admin.from("lessons").select("id").limit(1);
     if (lessons && lessons.length > 0) {
-      await userBClient.from("user_lesson_progress").upsert({
+      await admin.from("user_lesson_progress").upsert({
         user_id: userBId,
         lesson_id: lessons[0].id,
         progress: 80,
@@ -156,6 +158,48 @@ describe("Security & RLS Rigorous Verification (Phase 2 Task 8)", () => {
     // RLS denies insert for learners on user_skill_progress
     expect(error).not.toBeNull();
     expect(error?.code).toBe("42501"); // insufficient_privilege
+  });
+
+  it("4b. Learners cannot forge lesson completion (migration 009 revokes INSERT/UPDATE)", async () => {
+    const { data: lessons } = await admin.from("lessons").select("id").limit(1);
+    const lessonId = lessons![0].id;
+
+    // INSERT / upsert is rejected outright.
+    const ins = await userAClient
+      .from("user_lesson_progress")
+      .upsert({
+        user_id: userAId,
+        lesson_id: lessonId,
+        status: "completed",
+        progress: 100,
+      })
+      .select();
+    expect(ins.error?.code).toBe("42501");
+
+    // Seed a legitimate row with the service role, then confirm the learner
+    // cannot UPDATE it either, and that the stored value is untouched.
+    await admin.from("user_lesson_progress").upsert({
+      user_id: userAId,
+      lesson_id: lessonId,
+      status: "in_progress",
+      progress: 10,
+    });
+
+    const upd = await userAClient
+      .from("user_lesson_progress")
+      .update({ status: "completed", progress: 100 })
+      .eq("user_id", userAId)
+      .eq("lesson_id", lessonId);
+    expect(upd.error?.code).toBe("42501");
+
+    const { data: after } = await admin
+      .from("user_lesson_progress")
+      .select("status, progress")
+      .eq("user_id", userAId)
+      .eq("lesson_id", lessonId)
+      .single();
+    expect(after?.status).toBe("in_progress");
+    expect(Number(after?.progress)).toBe(10);
   });
 
   it("5. Unauthenticated users cannot access private user data", async () => {
